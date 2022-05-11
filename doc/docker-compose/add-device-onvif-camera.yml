@@ -20,8 +20,6 @@ services:
   device-onvif-camera:
     image: edgexfoundry/device-onvif-camera${ARCH}:${DEVICE_ONVIFCAM_VERSION}
     user: "${EDGEX_USER}:${EDGEX_GROUP}"
-    ports:
-      - "127.0.0.1:59984:59984"
     container_name: edgex-device-onvif-camera
     hostname: edgex-device-onvif-camera
     read_only: true
@@ -31,11 +29,16 @@ services:
     env_file:
       - common.env
     environment:
-      SERVICE_HOST: edgex-device-onvif-camera
+      SERVICE_HOST: 10.0.0.147
       MESSAGEQUEUE_HOST: edgex-redis
+      EDGEX_SECURITY_SECRET_STORE: "false"
+      DEVICE_DISCOVERY_ENABLED: "true"
+      DRIVER_DISCOVERYETHERNETINTERFACE: enp0s31f6
+      DRIVER_DEFAULTSECRETPATH: credentials001
     depends_on:
       - consul
       - data
       - metadata
     security_opt:
       - no-new-privileges:true
+    command: -cp=consul.http://localhost:8500 --registry --confdir=/res

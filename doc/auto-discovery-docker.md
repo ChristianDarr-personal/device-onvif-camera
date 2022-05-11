@@ -1,22 +1,34 @@
 # Set Up Auto Discovery with Docker
 
-Since auto-discovery mechanism uses multicast UDP to find the available camera, so the device-onvif-camera needs to send out the probe message for searching cameras.
+The auto-discovery mechanism uses multicast UDP to find  available cameras, so the device-onvif-camera service needs to send out the probe message to search.
 
-But we can’t send the multicast message from the **edgex network** to the **host network** in the **docker container**. 
+However, we can’t send the multicast message from the **edgex network** to the **host network** in the **docker container**. 
 
 The workaround is running the **dockerized device-onvif-camera** on the **host network**.
 
 <img alt="overview" src="images/auto-discovery-docker-overview.jpg" width="75%"/>
 
-Note: For macOS, the network_mode: "host" probably not working as expected: https://github.com/docker/for-mac/issues/1031
+Note: For macOS, the network_mode: "host" probably does not as expected: https://github.com/docker/for-mac/issues/1031
 
-## None Security Mode
+## Non-Security Mode
 
 ### Prepare edgex-compose/compose-builder
 
 #### 1. Download the [edgex-compose](https://github.com/edgexfoundry/edgex-compose) and setup it according to the [docker-compose setup guide](./docker-compose/README.md)
 
-#### 2. Replace the `add-device-onvif-camera.yml` with the following content:
+#### 2. Update  the `add-device-onvif-camera.yml` file with the following content:
+
+1. Remove the `ports` configuration
+2. Replace `networks` with `network_mode: "host"`
+3. Remove `env_file`
+4. Modify `SERVICE_HOST` env to match the machine IP
+5. Set `EDGEX_SECURITY_SECRET_STORE` env to `"false"` value
+6. Enable auto-discovery by `DEVICE_DISCOVERY_ENABLED` with `"true"` value
+7. Use `DRIVER_DISCOVERYETHERNETINTERFACE` to specify the ethernet interface for discovering
+8. Use `DRIVER_DEFAULTSECRETPATH` to specify the default secret path
+9. Use `WRITABLE_LOGLEVEL` to specify the log level for debugging
+10. Add `command` to override the CMD because we don't use the configuration provider from Consul
+
 ```yaml
 services:
   device-onvif-camera:
@@ -27,7 +39,7 @@ services:
     read_only: true
     restart: always
     environment:
-      SERVICE_HOST: edgex-device-onvif-camera
+      SERVICE_HOST: 192.168.0.0
       EDGEX_SECURITY_SECRET_STORE: "false"
       DEVICE_DISCOVERY_ENABLED: "true"
       DRIVER_DISCOVERYETHERNETINTERFACE: enp0s3
@@ -41,20 +53,7 @@ services:
       - no-new-privileges:true
     command: -cp=consul.http://localhost:8500 --registry --confdir=/res
 ```
-
-**Note**: The user should replace the host IP to match their own machine IP
-
-- Remove the useless port mapping when using the host network
-- Replace **networks** with **network_mode: "host"**
-- Remove `env_file` because we don't use the env like `CLIENTS_CORE_DATA_HOST=edgex-core-data`
-- Modify SERVICE_HOST env to match the machine IP
-- Add EDGEX_SECURITY_SECRET_STORE env with "false" value
-- Enable auto-discovery by `DEVICE_DISCOVERY_ENABLED` with "true" value
-- Use `DRIVER_DISCOVERYETHERNETINTERFACE` to specify the ethernet interface for discovering
-- Use `DRIVER_DEFAULTSECRETPATH` to specify the default secret path
-- Use `WRITABLE_LOGLEVEL` to specify the log level for debugging
-- Add command to override the CMD because we don't use the configuration provider from Consul
-
+> Example add-device-onvif-camera.yml contents
 
 ### Deploy EdgeX services and device-onvif-camera
 Deploy services with the following command:

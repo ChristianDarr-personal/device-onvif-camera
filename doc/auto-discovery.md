@@ -105,7 +105,7 @@ For example:
 │                 │3.Create device│    Onvif     │1.Discover camera │                 │
 │ metadata service◄───────────────┼─   Device  ──┼──────────────────┼──► Onvif Camera │
 │                 │               │    Service   │2.Get device info │                 │
-│                 │               │              │                  │                 │
+│                 │               │           ◄──┼──────────────────┼──               │
 └─────────────────┘               └──────────────┘                  └─────────────────┘
 ```
 1. Discover camera via WS-Discovery
@@ -152,30 +152,58 @@ For example:
   - DefaultSecretPath="credentials001"
 - GetDeviceInformation function provides Manufacturer, Model, FirmwareVersion, SerialNumber, HardwareId to protocol properties for provision watcher to filter
 
+## How does netscan work?
+An alternative method of discovery is a netscan, where the device service is provided a set of IP addresses on a network to scan for ONVIF protocol devices using unicast.
+
+For example, if the provided CIDR is 10.0.0.0/24, it will probe IP addresses 10.0.0.0 to 10.0.0.255 for an ONVIF compliant device using soap commands, and return any devices it finds. These devices are then added to the device service based using the protocol information from the probes.
+
+Functionally, netscan uses the same method for adding the device to EdgeX.
+
 
 ## Usage
 ## 1. Define driver config
 
-The device service expects the Onvif camera should be installed and configured, and we can discover the camera from the **specified network** and **get the required device information**.
+1. Ensure that the cameras are all installed and configured before attempting discovery. 
 
-To achieve that, we need to define the following config for auto-discovery mechanism:
-* **DiscoveryEthernetInterface** - Specify the target EthernetInterface for discovering. The default value is `en0`, the user can modify it to meet their requirement.
-* **DefaultAuthMode** - Specify the default AuthMode for discovered devices.
-* **DefaultSecretPath** - Specify the default SecretPath for discovered devices.
+2. Define the following configurations in `cmd/res/configuration.toml` for auto-discovery mechanism:
 
-For example:
-```yaml
+
+```toml
 [Driver]
-DiscoveryEthernetInterface = "en0"
-DefaultAuthMode = "usernametoken"
-DefaultSecretPath = "credentials001"
-```
+CredentialsRetryTime = "120" # Seconds
+CredentialsRetryWait = "1" # Seconds
+RequestTimeout = "5" # Seconds
+DiscoveryEthernetInterface = "" # The target EthernetInterface for discovery. Defaults to 'en0'
+DefaultAuthMode = "usernametoken" # Set the credentials authorization mode
+DefaultSecretPath = "credentials001" # Set the secret path
 
+# BaseNotificationURL indicates the device service network location
+BaseNotificationURL = "http://192.168.12.112:59984"
+
+# Allows the option for different discovery mechanisms
+DiscoveryMode = "both" # netscan, multicast, or both
+
+# List of IPv4 subnets to perform LLRP discovery process on, in CIDR format (X.X.X.X/Y)
+# separated by commas ex: "192.168.1.0/24,10.0.0.0/24"
+DiscoverySubnets = ""
+
+# Maximum simultaneous network probes
+ProbeAsyncLimit = "4000"
+
+# Maximum amount of milliseconds to wait for each IP probe before timing out.
+# This will also be the minimum time the discovery process can take.
+ProbeTimeoutMillis = "2000"
+
+# Maximum amount of seconds the discovery process is allowed to run before it will be cancelled.
+# It is especially important to have this configured in the case of larger subnets such as /16 and /8
+MaxDiscoverDurationSeconds = "300"
+```
+>configuration.toml
 
 ### 2. Enable the Discovery Mechanism
-The Discovery is triggered by device SDK. Once the device service startup, the device service will discover the Onvif camera with the specified interval.
+The Discovery is triggered by the device SDK. Once the device service starts, it will discover the Onvif camera(s) within the specified interval.
 
-[Option 1] Enable from the configuration.toml
+[Option 1] Enable from `configuration.toml`
 ```yaml
 [Device] 
 ...
