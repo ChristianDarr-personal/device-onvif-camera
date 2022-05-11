@@ -119,7 +119,7 @@ DiscoveryMode = "both" # netscan, multicast, or both
 
 # List of IPv4 subnets to perform LLRP discovery process on, in CIDR format (X.X.X.X/Y)
 # separated by commas ex: "192.168.1.0/24,10.0.0.0/24"
-DiscoverySubnets = "10.0.0.147/24"
+DiscoverySubnets = ""
 
 # Maximum simultaneous network probes
 ProbeAsyncLimit = "4000"

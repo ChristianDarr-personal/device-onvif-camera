@@ -29,7 +29,7 @@ services:
     env_file:
       - common.env
     environment:
-      SERVICE_HOST: 10.0.0.147
+      SERVICE_HOST: edgex-device-onvif-camera # replace with system IP
       MESSAGEQUEUE_HOST: edgex-redis
       EDGEX_SECURITY_SECRET_STORE: "false"
       DEVICE_DISCOVERY_ENABLED: "true"
