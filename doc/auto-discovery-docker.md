@@ -1,6 +1,6 @@
 # Set Up Auto Discovery with Docker
 
-The auto-discovery mechanism uses multicast UDP to find  available cameras, so the device-onvif-camera service needs to send out the probe message to search.
+The auto-discovery mechanisms uses multicast and unicast UDP to find  available cameras, so the device-onvif-camera service needs to send out the probe message to search.
 
 However, we can’t send the multicast message from the **edgex network** to the **host network** in the **docker container**. 
 
@@ -62,7 +62,7 @@ make run no-secty ds-onvif-camera
 ```
 
 ### Inspect the device-onvif-camera
-The user can docker logs to trace the auto-discovery
+The user can use docker logs to trace the auto-discovery
 ```shell
 $ docker logs edgex-device-onvif-camera -f --tail 10
 ...
@@ -77,7 +77,7 @@ level=DEBUG ts=2021-12-17T08:26:39.782834447Z app=device-onvif-camera source=onv
 level=DEBUG ts=2021-12-17T08:26:39.782871465Z app=device-onvif-camera source=driver.go:333 msg="Discovered camera from the address '192.168.56.101:10001'"
 level=DEBUG ts=2021-12-17T08:26:39.782886193Z app=device-onvif-camera source=async.go:127 msg="Filtered device addition finished"
 ```
-Then user can follow [the doc to add Provision Watcher](./auto-discovery.md).
+Then user can follow [this doc to add a provision watcher](./auto-discovery.md) to add the discovered devices to EdgeX.
 
 
 ## Security Mode
@@ -119,19 +119,18 @@ services:
 ```
 
 **Note**: The user should replace the host IP to match their own machine IP
-
-- Remove the useless port mapping when using the host network
-- Replace **networks** with **network_mode: "host"**
-- Remove `env_file` because we don't use the env like `CLIENTS_CORE_DATA_HOST=edgex-core-data`
-- Modify `SERVICE_HOST` env to match the machine IP
-- Add `EDGEX_SECURITY_SECRET_STORE` env with "true" value
-- Enable auto-discovery by `DEVICE_DISCOVERY_ENABLED` with "true" value
-- Use `DRIVER_DISCOVERYETHERNETINTERFACE` to specify the ethernet interface for discovering
-- Use `DRIVER_DEFAULTSECRETPATH` to specify the default secret path
-- Use `SECRETSTORE_HOST` to specify the Vault's host
-- Use `STAGEGATE_BOOTSTRAPPER_HOST`, `STAGEGATE_READY_TORUNPORT`, `STAGEGATE_WAITFOR_TIMEOUT` to specify the bootstrapper settings for waiting the security set up
-- Use `WRITABLE_LOGLEVEL` to specify the log level for debugging
-- Add command to override the CMD because we don't use the configuration provider from Consul
+1. Remove the `ports` configuration
+1. Replace `networks` with `network_mode: "host"`
+1. Remove `env_file`
+1. Modify `SERVICE_HOST` env to match the machine IP
+1. Set `EDGEX_SECURITY_SECRET_STORE` env to `"true"` value
+1. Enable auto-discovery by `DEVICE_DISCOVERY_ENABLED` with `"true"` value
+1. Use `DRIVER_DISCOVERYETHERNETINTERFACE` to specify the ethernet interface for discovering
+1. Use `DRIVER_DEFAULTSECRETPATH` to specify the default secret path
+1. Use `SECRETSTORE_HOST` to specify the Vault's host
+1. Use `STAGEGATE_BOOTSTRAPPER_HOST`, `STAGEGATE_READY_TORUNPORT`, `STAGEGATE_WAITFOR_TIMEOUT` to specify the bootstrapper settings for waiting the security set up
+1. Use `WRITABLE_LOGLEVEL` to specify the log level for debugging
+1. Add `command` to override the CMD because we don't use the configuration provider from Consul    
 
 #### 3. Export the Security Bootstrapper
 Open the `add-security.yml` file and modify the `security-bootstrapper` section to export the port. This port is used for the device-onvif-camera to wait for the security setup.
@@ -188,4 +187,4 @@ level=DEBUG ts=2021-12-17T08:26:39.782834447Z app=device-onvif-camera source=onv
 level=DEBUG ts=2021-12-17T08:26:39.782871465Z app=device-onvif-camera source=driver.go:333 msg="Discovered camera from the address '192.168.56.101:10001'"
 level=DEBUG ts=2021-12-17T08:26:39.782886193Z app=device-onvif-camera source=async.go:127 msg="Filtered device addition finished"
 ```
-Then user can follow [the doc to add Provision Watcher](./auto-discovery.md).
+Then user can follow [this doc to add a provision watcher](./auto-discovery.md) to add the discovered devices to EdgeX.

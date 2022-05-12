@@ -1,6 +1,7 @@
 # Auto Discovery
+There are two methods that the device service can use to discover and add ONVIF compliant cameras, WS-Discovery and netscan.
 
-## How does the WS-Discovery work?
+## How does WS-Discovery work?
 
 ONVIF devices support WS-Discovery, which is a mechanism that supports probing a network to find ONVIF capable devices.
 
@@ -37,7 +38,6 @@ For example:
     ```
 
 2. The Onvif camera responds the Hello message according to the Probe message
-   - The Hello message from HIKVISION:
     ```xml
     <?xml version="1.0" encoding="UTF-8"?>
     <env:Envelope
@@ -65,7 +65,8 @@ For example:
         </env:Body>
     </env:Envelope>
     ```
-   - The Hello message from Tapo C200:
+    > The Hello message from HIKVISION
+   
     ```xml
     <?xml version="1.0" encoding="UTF-8"?>
     <SOAP-ENV:Envelope
@@ -97,6 +98,14 @@ For example:
         </SOAP-ENV:Body>
     </SOAP-ENV:Envelope>
     ```
+    >The Hello message from Tapo C200
+
+
+## How does netscan work?
+An alternative method of discovery is a netscan, where the device service is provided a set of IP addresses on a network to scan for ONVIF protocol devices using unicast.
+
+For example, if the provided CIDR is 10.0.0.0/24, it will probe IP addresses 10.0.0.0 to 10.0.0.255 for an ONVIF compliant device using soap commands, and return any devices it finds. These devices are then added to the device service based using the protocol information from the probes.
+
 
 ## EdgeX integrates the WS-Discovery
 ```
@@ -152,13 +161,6 @@ For example:
   - DefaultSecretPath="credentials001"
 - GetDeviceInformation function provides Manufacturer, Model, FirmwareVersion, SerialNumber, HardwareId to protocol properties for provision watcher to filter
 
-## How does netscan work?
-An alternative method of discovery is a netscan, where the device service is provided a set of IP addresses on a network to scan for ONVIF protocol devices using unicast.
-
-For example, if the provided CIDR is 10.0.0.0/24, it will probe IP addresses 10.0.0.0 to 10.0.0.255 for an ONVIF compliant device using soap commands, and return any devices it finds. These devices are then added to the device service based using the protocol information from the probes.
-
-Functionally, netscan uses the same method for adding the device to EdgeX.
-
 
 ## Usage
 ## 1. Define driver config
@@ -198,7 +200,7 @@ ProbeTimeoutMillis = "2000"
 # It is especially important to have this configured in the case of larger subnets such as /16 and /8
 MaxDiscoverDurationSeconds = "300"
 ```
->configuration.toml
+>Example of configuration.toml contents
 
 ### 2. Enable the Discovery Mechanism
 The Discovery is triggered by the device SDK. Once the device service starts, it will discover the Onvif camera(s) within the specified interval.
