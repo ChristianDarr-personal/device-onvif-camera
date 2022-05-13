@@ -1,6 +1,7 @@
 # Auto Discovery
 There are two methods that the device service can use to discover and add ONVIF compliant cameras, WS-Discovery and netscan.
 
+
 ## How does WS-Discovery work?
 
 ONVIF devices support WS-Discovery, which is a mechanism that supports probing a network to find ONVIF capable devices.
@@ -9,12 +10,12 @@ Probe messages are sent over UDP to a standardized multicast address and UDP por
 
 <img src="images/auto-discovery.jpg" width="75%"/>
 
-WS-Discovery is normally limited by the network segmentation since the multicast packages typically do not traverse routers.
+WS-Discovery is generally faster than netscan becuase it only sends out one broadcast signal. However, it is normally limited by the network segmentation since the multicast packages typically do not traverse routers.
 
 - Find the WS-Discovery programmer guide from https://www.onvif.org/profiles/whitepapers/
 - Wiki page https://en.wikipedia.org/wiki/WS-Discovery
 
-For example:
+Example:
 1. The client sends Probe message to find Onvif camera on the network.
     ```xml
     <?xml version="1.0" encoding="UTF-8"?>
@@ -104,10 +105,12 @@ For example:
 ## How does netscan work?
 An alternative method of discovery is a netscan, where the device service is provided a set of IP addresses on a network to scan for ONVIF protocol devices using unicast.
 
-For example, if the provided CIDR is 10.0.0.0/24, it will probe IP addresses 10.0.0.0 to 10.0.0.255 for an ONVIF compliant device using soap commands, and return any devices it finds. These devices are then added to the device service based using the protocol information from the probes.
+For example, if the provided CIDR is 10.0.0.0/24, it will probe the IP's subnet mask for ONVIF compliant devices using soap commands, directly connecting to each address. It then returns any devices it finds and adds them to the device service using the protocol information from the probes.
+
+ This method is going to be slower than WS-Discovery, becuase it has to make individual connections. However, it can reach a much wider net of networks and devices than WS-Discovery.
 
 
-## EdgeX integrates the WS-Discovery
+## Adding the Devices to EdgeX
 ```
 ┌─────────────────┐               ┌──────────────┐                  ┌─────────────────┐
 │                 │               │              │                  │                 │
@@ -155,7 +158,7 @@ For example, if the provided CIDR is 10.0.0.0/24, it will probe IP addresses 10.
     ```
 
 - Device Name:  Manufacturer-Model-UUID (The UUID extracted from the probe response's EndpointReference address)
-- The serviceName, profileName, adminState, autoEvets are defined by the provisionWatcher
+- The serviceName, profileName, adminState, autoEvents are defined by the provisionWatcher
 - Predefine the driver config authMode and secretPath for discovered device, for exmaple:
   - DefaultAuthMode="usernametoken"
   - DefaultSecretPath="credentials001"
@@ -203,7 +206,7 @@ MaxDiscoverDurationSeconds = "300"
 >Example of configuration.toml contents
 
 ### 2. Enable the Discovery Mechanism
-The Discovery is triggered by the device SDK. Once the device service starts, it will discover the Onvif camera(s) within the specified interval.
+Device discovery is triggered by the device SDK. Once the device service starts, it will discover the Onvif camera(s) within the specified interval.
 
 [Option 1] Enable from `configuration.toml`
 ```yaml
@@ -221,11 +224,11 @@ export DEVICE_DISCOVERY_INTERVAL=30s
 ```
 
 ### 3. Add Provision Watcher
-The Provision Watcher is used to filter the discovered devices and provide information to create the devices.
+The provision watcher is used to filter the discovered devices and provide information to create the devices.
 
 #### Example - HIKVISION Onvif Camera Provision
 
-Any discovered devices that match the Manufacturer and Model should be added to core metadata by device service
+Any discovered devices that match the `Manufacturer` and `Model` should be added to core metadata by the device service
 ```shell
 curl --request POST 'http://0.0.0.0:59881/api/v2/provisionwatcher' \
     --header 'Content-Type: application/json' \
