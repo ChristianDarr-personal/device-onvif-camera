@@ -1,5 +1,5 @@
 # Auto Discovery
-There are two methods that the device service can use to discover and add ONVIF compliant cameras, WS-Discovery and netscan.
+There are two methods that the device service can use to discover and add ONVIF compliant cameras using WS-Discovery, multicast and netscan.
 
 
 ## How does WS-Discovery work?
@@ -39,6 +39,7 @@ Example:
     ```
 
 2. The Onvif camera responds the Hello message according to the Probe message
+    > The Hello message from HIKVISION
     ```xml
     <?xml version="1.0" encoding="UTF-8"?>
     <env:Envelope
@@ -66,8 +67,8 @@ Example:
         </env:Body>
     </env:Envelope>
     ```
-    > The Hello message from HIKVISION
-   
+    
+    >The Hello message from Tapo C200
     ```xml
     <?xml version="1.0" encoding="UTF-8"?>
     <SOAP-ENV:Envelope
@@ -99,7 +100,7 @@ Example:
         </SOAP-ENV:Body>
     </SOAP-ENV:Envelope>
     ```
-    >The Hello message from Tapo C200
+    
 
 
 ## How does netscan work?
@@ -107,7 +108,7 @@ An alternative method of discovery is a netscan, where the device service is pro
 
 For example, if the provided CIDR is 10.0.0.0/24, it will probe the IP's subnet mask for ONVIF compliant devices using soap commands, directly connecting to each address. It then returns any devices it finds and adds them to the device service using the protocol information from the probes.
 
- This method is going to be slower than WS-Discovery, becuase it has to make individual connections. However, it can reach a much wider net of networks and devices than WS-Discovery.
+ This method is going to be slower than WS-Discovery, becuase it has to make individual connections. However, it can reach a much wider Set of networks and devices than WS-Discovery.
 
 
 ## Adding the Devices to EdgeX
@@ -178,7 +179,7 @@ For example, if the provided CIDR is 10.0.0.0/24, it will probe the IP's subnet 
 CredentialsRetryTime = "120" # Seconds
 CredentialsRetryWait = "1" # Seconds
 RequestTimeout = "5" # Seconds
-DiscoveryEthernetInterface = "" # The target EthernetInterface for discovery. Defaults to 'en0'
+DiscoveryEthernetInterface = "" # The target EthernetInterface for discovery.
 DefaultAuthMode = "usernametoken" # Set the credentials authorization mode
 DefaultSecretPath = "credentials001" # Set the secret path
 
@@ -206,7 +207,8 @@ MaxDiscoverDurationSeconds = "300"
 >Example of configuration.toml contents
 
 ### 2. Enable the Discovery Mechanism
-Device discovery is triggered by the device SDK. Once the device service starts, it will discover the Onvif camera(s) within the specified interval.
+Device discovery is triggered by the device SDK. Once the device service starts, it will discover the Onvif camera(s) at the specified interval.
+>NOTE: you can also manually call discovery using this command: `curl -X POST http://<service-host>:59984/api/v2/discovery`
 
 [Option 1] Enable from `configuration.toml`
 ```yaml
