@@ -108,7 +108,7 @@ An alternative method of discovery is a netscan, where the device service is pro
 
 For example, if the provided CIDR is 10.0.0.0/24, it will probe the IP's subnet mask for ONVIF compliant devices using soap commands, directly connecting to each address. It then returns any devices it finds and adds them to the device service using the protocol information from the probes.
 
- This method is going to be slower than WS-Discovery, becuase it has to make individual connections. However, it can reach a much wider Set of networks and devices than WS-Discovery.
+This method is going to be slower and more network-intensive than multicast WS-Discovery, becuase it has to make individual connections. However, it can reach a much wider set of networks and works better behind NATs (such as docker networks).
 
 
 ## Adding the Devices to EdgeX
@@ -175,21 +175,21 @@ For example, if the provided CIDR is 10.0.0.0/24, it will probe the IP's subnet 
 
 
 ```toml
+# Driver configs
 [Driver]
 CredentialsRetryTime = "120" # Seconds
 CredentialsRetryWait = "1" # Seconds
 RequestTimeout = "5" # Seconds
-DiscoveryEthernetInterface = "" # The target EthernetInterface for discovery.
-DefaultAuthMode = "usernametoken" # Set the credentials authorization mode
-DefaultSecretPath = "credentials001" # Set the secret path
-
+DiscoveryEthernetInterface = ""
+DefaultAuthMode = "usernametoken"
+DefaultSecretPath = "credentials001"
 # BaseNotificationURL indicates the device service network location
 BaseNotificationURL = "http://192.168.12.112:59984"
 
-# Allows the option for different discovery mechanisms
+# Select which discovery mechanism(s) to use
 DiscoveryMode = "both" # netscan, multicast, or both
 
-# List of IPv4 subnets to perform LLRP discovery process on, in CIDR format (X.X.X.X/Y)
+# List of IPv4 subnets to perform netscan discovery on, in CIDR format (X.X.X.X/Y)
 # separated by commas ex: "192.168.1.0/24,10.0.0.0/24"
 DiscoverySubnets = ""
 
