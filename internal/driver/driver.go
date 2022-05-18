@@ -377,7 +377,22 @@ func (d *Driver) Discover() {
 		discoveredDevices = d.discoverNetscan(ctx, discoveredDevices)
 	}
 	// pass the discovered devices to the EdgeX SDK to be passed through to the provision watchers
-	d.deviceCh <- discoveredDevices
+	filtered := d.rediscoverCheck(discoveredDevices)
+	d.deviceCh <- filtered
+}
+
+func (d *Driver) rediscoverCheck(preDiscovered []sdkModel.DiscoveredDevice) (discovered []sdkModel.DiscoveredDevice) {
+	var filtered []sdkModel.DiscoveredDevice // initialize final slice
+	// devMap := d.makeDeviceMap()              // create comparison map
+	for _, dev := range preDiscovered {
+		_, found := dev.Protocols["Onvif"]["EndpointRefAddress"]
+		if found {
+			//check if it has been disconnected
+		}
+
+	}
+	// filtered = preDiscovered
+	return filtered
 }
 
 // multicast enable/disable via config option
