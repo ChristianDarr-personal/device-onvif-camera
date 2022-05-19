@@ -422,24 +422,79 @@ func (d *Driver) Discover() {
 		discoveredDevices = d.discoverNetscan(ctx, discoveredDevices)
 	}
 	// pass the discovered devices to the EdgeX SDK to be passed through to the provision watchers
-	filtered := d.rediscoverCheck(discoveredDevices)
+	filtered := d.discoverFilter(discoveredDevices)
 	d.deviceCh <- filtered
 }
 
-func (d *Driver) rediscoverCheck(preDiscovered []sdkModel.DiscoveredDevice) (discovered []sdkModel.DiscoveredDevice) {
-	var filtered []sdkModel.DiscoveredDevice // initialize final slice
-	// devMap := d.makeDeviceMap()              // create comparison map
-	for _, dev := range preDiscovered {
-		_, found := dev.Protocols["Onvif"]["EndpointRefAddress"]
-		if found {
-			//check if it has been disconnected
-		}
+func (d *Driver) discoverFilter(discovered []sdkModel.DiscoveredDevice) (filtered []sdkModel.DiscoveredDevice) {
+	// var filtered []sdkModel.DiscoveredDevice // initialize final slice
+	devMap := d.makeDeviceMap() // create comparison map
+	for _, dev := range discovered {
+		endRef := dev.Protocols["Onvif"]["EndpointRefAddress"]
+		if metaDev, found := devMap[endRef]; found {
+			existAddr := metaDev.Protocols["Onvif"]["Address"] + ":" + metaDev.Protocols["Onvif"]["Port"]
+			discAddr := dev.Protocols["Onvif"]["Address"] + ":" + dev.Protocols["Onvif"]["Port"]
+			if discAddr != existAddr {
+				// update an existing device
+			} else {
+				continue // do not send again if nothing changes
+			}
+		} else {
+			duplicate := false
+			for _, filterDev := range filtered {
+				if endRef == filterDev.Protocols["Onvif"]["EndpointRefAddress"] {
+					duplicate = true
+				}
 
+			}
+			if !duplicate {
+				filtered = append(filtered, dev) // send new device to edgex if there is no existing match
+			}
+		}
 	}
-	// filtered = preDiscovered
+	// filtered = discovered
 	return filtered
 }
 
+// func (info *discoveryInfo) updateExistingDevice(device contract.Device) error {
+// 	shouldUpdate := false
+// 	if device.OperatingState == contract.Down {
+// 		device.OperatingState = contract.Up
+// 		shouldUpdate = true
+// 	}
+
+// 	tcpInfo := device.Protocols["tcp"]
+// 	if tcpInfo == nil ||
+// 		info.host != tcpInfo["host"] ||
+// 		info.port != tcpInfo["port"] {
+// 		driver.lc.Info("Existing device has been discovered with a different network address.",
+// 			"oldInfo", fmt.Sprintf("%+v", tcpInfo),
+// 			"discoveredInfo", fmt.Sprintf("%+v", info))
+
+// 		device.Protocols["tcp"] = map[string]string{
+// 			"host": info.host,
+// 			"port": info.port,
+// 		}
+// 		// make sure it is enabled
+// 		device.OperatingState = contract.Up
+// 		shouldUpdate = true
+// 	}
+
+// 	if !shouldUpdate {
+// 		// the address is the same and device is already enabled, should not reach here
+// 		driver.lc.Warn("Re-discovered existing device at the same TCP address, nothing to do.")
+// 		return nil
+// 	}
+
+// 	if err := driver.svc.UpdateDevice(device); err != nil {
+// 		driver.lc.Error("There was an error updating the tcp address for an existing device.",
+// 			"deviceName", device.Name,
+// 			"error", err)
+// 		return err
+// 	}
+
+// 	return nil
+// }
 // multicast enable/disable via config option
 func (d *Driver) discoverMulticast(discovered []sdkModel.DiscoveredDevice) []sdkModel.DiscoveredDevice {
 	t0 := time.Now()
