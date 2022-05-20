@@ -236,33 +236,70 @@ func (d *Driver) makeDeviceMap() map[string]contract.Device {
 }
 
 func (d *Driver) discoverFilter(discovered []sdkModel.DiscoveredDevice) (filtered []sdkModel.DiscoveredDevice) {
-	var duplicates []sdkModel.DiscoveredDevice
 	devMap := d.makeDeviceMap() // create comparison map
-	var duplicate bool
 	for _, dev := range discovered {
-		duplicate = false
 		endRef := dev.Protocols["Onvif"]["EndpointRefAddress"]
-		for _, filterDev := range filtered {
-			if endRef == filterDev.Protocols["Onvif"]["EndpointRefAddress"] {
-				duplicate = true
-			}
-		}
-
-		if metaDev, found := devMap[endRef]; found && !duplicate {
-			duplicate = true
+		if metaDev, found := devMap[endRef]; found {
+			// if device is already in metadata, update it if necessary
 			d.updateExistingDevice(metaDev, dev)
 		} else {
-			duplicate = false
-		}
-
-		if !duplicate {
-			filtered = append(filtered, dev) // send new device to edgex if there is no existing match
-		} else {
-			duplicates = append(duplicates, dev)
+			duplicate := false
+			// check if a matching device was discovered by another method
+			for _, filterDev := range filtered {
+				if endRef == filterDev.Protocols["Onvif"]["EndpointRefAddress"] {
+					duplicate = true
+				}
+			}
+			// if not a part of metadata or not discovered by another method, send to EdgeX
+			if !duplicate {
+				filtered = append(filtered, dev) // send new device to edgex if there is no existing match
+			}
 		}
 	}
-
 	return filtered
 }
 
-// func (d *Driver) discover
+// alternate version of discoverFilter
+// func (d *Driver) discoverFilter(discovered []sdkModel.DiscoveredDevice) (filtered []sdkModel.DiscoveredDevice) {
+// 	var duplicates []sdkModel.DiscoveredDevice
+// 	devMap := d.makeDeviceMap() // create comparison map
+// 	var duplicate bool
+// 	for _, dev := range discovered {
+// 		duplicate = false
+// 		endRef := dev.Protocols["Onvif"]["EndpointRefAddress"]
+// 		for _, filterDev := range filtered {
+// 			if endRef == filterDev.Protocols["Onvif"]["EndpointRefAddress"] {
+// 				duplicate = true
+// 			}
+// 		}
+// 		if metaDev, found := devMap[endRef]; found && !duplicate {
+// 			duplicate = true
+// 			d.updateExistingDevice(metaDev, dev)
+// 		} else {
+// 			duplicate = false
+// 		}
+// 		if !duplicate {
+// 			filtered = append(filtered, dev) // send new device to edgex if there is no existing match
+// 		} else {
+// 			duplicates = append(duplicates, dev)
+// 		}
+// 	}
+// 	return filtered
+// }
+
+func (d *Driver) checkConnection(discovered []sdkModel.DiscoveredDevice) {
+	devMap := d.makeDeviceMap() // create comparison map
+	var connected bool
+	for name, dev := range devMap {
+		connected = false
+		for _, discDev := range discovered {
+			if discDev.Protocols["Onvif"]["EndpointRefAddress"] == name {
+				connected = true
+			}
+		}
+		if !connected {
+			dev.OperatingState = contract.Down
+			d.svc.UpdateDevice(dev)
+		}
+	}
+}
