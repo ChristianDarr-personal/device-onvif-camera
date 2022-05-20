@@ -28,6 +28,7 @@ import (
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/errors"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
+	contract "github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 
 	"github.com/IOTechSystems/onvif"
 	"github.com/IOTechSystems/onvif/device"
@@ -293,12 +294,10 @@ func (d *Driver) UpdateDevice(deviceName string, protocols map[string]models.Pro
 	return nil
 }
 
-// updateExistingDevice compares a discovered device and a matchingexisting device, and updates the existing
-// device network address and port if necessary
-func (d *Driver) updateExistingDevice(device models.Device, discDev sdkModel.DiscoveredDevice) error {
+func (d *Driver) updateExistingDevice(device contract.Device, discDev sdkModel.DiscoveredDevice) error {
 	shouldUpdate := false
-	if device.OperatingState == models.Down {
-		device.OperatingState = models.Up
+	if device.OperatingState == contract.Down {
+		device.OperatingState = contract.Up
 		shouldUpdate = true
 	}
 
@@ -317,11 +316,12 @@ func (d *Driver) updateExistingDevice(device models.Device, discDev sdkModel.Dis
 		device.Protocols["Onvif"]["Address"] = discAddr
 		device.Protocols["Onvif"]["Port"] = discPort
 
-		device.OperatingState = models.Up
+		device.OperatingState = contract.Up
 		shouldUpdate = true
 	}
 
 	if !shouldUpdate {
+		// the address is the same and device is already enabled, should not reach here
 		// if both methods of dicovery are used, this message will print for the every camera discovered by netscan
 		d.lc.Warn("Re-discovered existing device at the same network address, nothing to do")
 		return nil
@@ -426,75 +426,6 @@ func (d *Driver) Discover() {
 	d.deviceCh <- filtered
 }
 
-func (d *Driver) discoverFilter(discovered []sdkModel.DiscoveredDevice) (filtered []sdkModel.DiscoveredDevice) {
-	// var filtered []sdkModel.DiscoveredDevice // initialize final slice
-	devMap := d.makeDeviceMap() // create comparison map
-	for _, dev := range discovered {
-		endRef := dev.Protocols["Onvif"]["EndpointRefAddress"]
-		if metaDev, found := devMap[endRef]; found {
-			existAddr := metaDev.Protocols["Onvif"]["Address"] + ":" + metaDev.Protocols["Onvif"]["Port"]
-			discAddr := dev.Protocols["Onvif"]["Address"] + ":" + dev.Protocols["Onvif"]["Port"]
-			if discAddr != existAddr {
-				// update an existing device
-			} else {
-				continue // do not send again if nothing changes
-			}
-		} else {
-			duplicate := false
-			for _, filterDev := range filtered {
-				if endRef == filterDev.Protocols["Onvif"]["EndpointRefAddress"] {
-					duplicate = true
-				}
-
-			}
-			if !duplicate {
-				filtered = append(filtered, dev) // send new device to edgex if there is no existing match
-			}
-		}
-	}
-	// filtered = discovered
-	return filtered
-}
-
-// func (info *discoveryInfo) updateExistingDevice(device contract.Device) error {
-// 	shouldUpdate := false
-// 	if device.OperatingState == contract.Down {
-// 		device.OperatingState = contract.Up
-// 		shouldUpdate = true
-// 	}
-
-// 	tcpInfo := device.Protocols["tcp"]
-// 	if tcpInfo == nil ||
-// 		info.host != tcpInfo["host"] ||
-// 		info.port != tcpInfo["port"] {
-// 		driver.lc.Info("Existing device has been discovered with a different network address.",
-// 			"oldInfo", fmt.Sprintf("%+v", tcpInfo),
-// 			"discoveredInfo", fmt.Sprintf("%+v", info))
-
-// 		device.Protocols["tcp"] = map[string]string{
-// 			"host": info.host,
-// 			"port": info.port,
-// 		}
-// 		// make sure it is enabled
-// 		device.OperatingState = contract.Up
-// 		shouldUpdate = true
-// 	}
-
-// 	if !shouldUpdate {
-// 		// the address is the same and device is already enabled, should not reach here
-// 		driver.lc.Warn("Re-discovered existing device at the same TCP address, nothing to do.")
-// 		return nil
-// 	}
-
-// 	if err := driver.svc.UpdateDevice(device); err != nil {
-// 		driver.lc.Error("There was an error updating the tcp address for an existing device.",
-// 			"deviceName", device.Name,
-// 			"error", err)
-// 		return err
-// 	}
-
-// 	return nil
-// }
 // multicast enable/disable via config option
 func (d *Driver) discoverMulticast(discovered []sdkModel.DiscoveredDevice) []sdkModel.DiscoveredDevice {
 	t0 := time.Now()
