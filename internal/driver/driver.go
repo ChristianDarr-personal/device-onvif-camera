@@ -28,7 +28,6 @@ import (
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/errors"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
-	contract "github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 
 	"github.com/IOTechSystems/onvif"
 	"github.com/IOTechSystems/onvif/device"
@@ -294,10 +293,10 @@ func (d *Driver) UpdateDevice(deviceName string, protocols map[string]models.Pro
 	return nil
 }
 
-func (d *Driver) updateExistingDevice(device contract.Device, discDev sdkModel.DiscoveredDevice) error {
+func (d *Driver) updateExistingDevice(device models.Device, discDev sdkModel.DiscoveredDevice) error {
 	shouldUpdate := false
-	if device.OperatingState == contract.Down {
-		device.OperatingState = contract.Up
+	if device.OperatingState == models.Down {
+		device.OperatingState = models.Up
 		shouldUpdate = true
 	}
 
@@ -316,12 +315,11 @@ func (d *Driver) updateExistingDevice(device contract.Device, discDev sdkModel.D
 		device.Protocols["Onvif"]["Address"] = discAddr
 		device.Protocols["Onvif"]["Port"] = discPort
 
-		device.OperatingState = contract.Up
+		device.OperatingState = models.Up
 		shouldUpdate = true
 	}
 
 	if !shouldUpdate {
-		// the address is the same and device is already enabled, should not reach here
 		// if both methods of dicovery are used, this message will print for the every camera discovered by netscan
 		d.lc.Warn("Re-discovered existing device at the same network address, nothing to do")
 		return nil
@@ -423,6 +421,7 @@ func (d *Driver) Discover() {
 	}
 	// pass the discovered devices to the EdgeX SDK to be passed through to the provision watchers
 	filtered := d.discoverFilter(discoveredDevices)
+	d.checkConnection(discoveredDevices)
 	d.deviceCh <- filtered
 }
 
