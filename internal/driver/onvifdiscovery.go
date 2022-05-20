@@ -234,3 +234,35 @@ func (d *Driver) makeDeviceMap() map[string]contract.Device {
 
 	return deviceMap
 }
+
+func (d *Driver) discoverFilter(discovered []sdkModel.DiscoveredDevice) (filtered []sdkModel.DiscoveredDevice) {
+	var duplicates []sdkModel.DiscoveredDevice
+	devMap := d.makeDeviceMap() // create comparison map
+	var duplicate bool
+	for _, dev := range discovered {
+		duplicate = false
+		endRef := dev.Protocols["Onvif"]["EndpointRefAddress"]
+		for _, filterDev := range filtered {
+			if endRef == filterDev.Protocols["Onvif"]["EndpointRefAddress"] {
+				duplicate = true
+			}
+		}
+
+		if metaDev, found := devMap[endRef]; found && !duplicate {
+			duplicate = true
+			d.updateExistingDevice(metaDev, dev)
+		} else {
+			duplicate = false
+		}
+
+		if !duplicate {
+			filtered = append(filtered, dev) // send new device to edgex if there is no existing match
+		} else {
+			duplicates = append(duplicates, dev)
+		}
+	}
+
+	return filtered
+}
+
+// func (d *Driver) discover
