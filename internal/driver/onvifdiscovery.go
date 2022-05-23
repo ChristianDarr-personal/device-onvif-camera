@@ -205,7 +205,6 @@ func executeRawProbe(conn net.Conn, params netscan.Params) ([]onvif.Device, erro
 }
 
 // makeDeviceMap creates a lookup table of existing devices by EndpointRefAddress
-// todo: will be used in the future for device re-discovery purposes
 func (d *Driver) makeDeviceMap() map[string]contract.Device {
 	devices := d.svc.Devices()
 	deviceMap := make(map[string]contract.Device, len(devices))
@@ -235,58 +234,41 @@ func (d *Driver) makeDeviceMap() map[string]contract.Device {
 	return deviceMap
 }
 
+// discoverFilter iterates through the discovered devices, and returns any that are not duplicates
+// of devices in metadata or are from an alternate discovery method
+// will return an empty slice if no new devices are discovered
 func (d *Driver) discoverFilter(discovered []sdkModel.DiscoveredDevice) (filtered []sdkModel.DiscoveredDevice) {
 	devMap := d.makeDeviceMap() // create comparison map
+	checked := make(map[string]bool)
 	for _, dev := range discovered {
 		endRef := dev.Protocols["Onvif"]["EndpointRefAddress"]
-		if metaDev, found := devMap[endRef]; found {
-			// if device is already in metadata, update it if necessary
-			d.updateExistingDevice(metaDev, dev)
-		} else {
-			duplicate := false
-			// check if a matching device was discovered by another method
-			for _, filterDev := range filtered {
-				if endRef == filterDev.Protocols["Onvif"]["EndpointRefAddress"] {
-					duplicate = true
+		_, prevDisc := checked[endRef]
+		if !prevDisc {
+			if metaDev, found := devMap[endRef]; found {
+				// if device is already in metadata, update it if necessary
+				checked[endRef] = true
+				d.updateExistingDevice(metaDev, dev)
+			} else {
+				duplicate := false
+				// check if a matching device was discovered by another method
+				for _, filterDev := range filtered {
+					if endRef == filterDev.Protocols["Onvif"]["EndpointRefAddress"] {
+						duplicate = true
+						break
+					}
 				}
-			}
-			// if not a part of metadata or not discovered by another method, send to EdgeX
-			if !duplicate {
-				filtered = append(filtered, dev) // send new device to edgex if there is no existing match
+				// if not a part of metadata or not discovered by another method, send to EdgeX
+				if !duplicate {
+					filtered = append(filtered, dev) // send new device to edgex if there is no existing match
+				}
 			}
 		}
 	}
 	return filtered
 }
 
-// alternate version of discoverFilter
-// func (d *Driver) discoverFilter(discovered []sdkModel.DiscoveredDevice) (filtered []sdkModel.DiscoveredDevice) {
-// 	var duplicates []sdkModel.DiscoveredDevice
-// 	devMap := d.makeDeviceMap() // create comparison map
-// 	var duplicate bool
-// 	for _, dev := range discovered {
-// 		duplicate = false
-// 		endRef := dev.Protocols["Onvif"]["EndpointRefAddress"]
-// 		for _, filterDev := range filtered {
-// 			if endRef == filterDev.Protocols["Onvif"]["EndpointRefAddress"] {
-// 				duplicate = true
-// 			}
-// 		}
-// 		if metaDev, found := devMap[endRef]; found && !duplicate {
-// 			duplicate = true
-// 			d.updateExistingDevice(metaDev, dev)
-// 		} else {
-// 			duplicate = false
-// 		}
-// 		if !duplicate {
-// 			filtered = append(filtered, dev) // send new device to edgex if there is no existing match
-// 		} else {
-// 			duplicates = append(duplicates, dev)
-// 		}
-// 	}
-// 	return filtered
-// }
-
+// checkConnection compares all existing devices and searches for a matching discovered device
+// it updates all disconnected devices with its status
 func (d *Driver) checkConnection(discovered []sdkModel.DiscoveredDevice) {
 	devMap := d.makeDeviceMap() // create comparison map
 	var connected bool
@@ -295,6 +277,8 @@ func (d *Driver) checkConnection(discovered []sdkModel.DiscoveredDevice) {
 		for _, discDev := range discovered {
 			if discDev.Protocols["Onvif"]["EndpointRefAddress"] == name {
 				connected = true
+				// dev.LastConnected = time.Now().UTC()
+				break
 			}
 		}
 		if !connected {
