@@ -293,6 +293,8 @@ func (d *Driver) UpdateDevice(deviceName string, protocols map[string]models.Pro
 	return nil
 }
 
+// updateExistingDevice compares a discovered device and a matchingexisting device, and updates the existing
+// device network address and port if necessary
 func (d *Driver) updateExistingDevice(device models.Device, discDev sdkModel.DiscoveredDevice) error {
 	shouldUpdate := false
 	if device.OperatingState == models.Down {
@@ -348,7 +350,7 @@ func (d *Driver) RemoveDevice(deviceName string, protocols map[string]models.Pro
 
 // createOnvifClient creates the Onvif client used to communicate with the specified the device
 func (d *Driver) createOnvifClient(deviceName string) error {
-	dev, err := sdk.RunningService().GetDeviceByName(deviceName)
+	dev, err := sdk.RunningService().GetDeviceByName(deviceName) // should this be by endpoint reference?
 	if err != nil {
 		return errors.NewCommonEdgeXWrapper(err)
 	}
