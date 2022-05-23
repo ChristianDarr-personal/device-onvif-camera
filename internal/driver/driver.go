@@ -293,6 +293,8 @@ func (d *Driver) UpdateDevice(deviceName string, protocols map[string]models.Pro
 	return nil
 }
 
+// updateExistingDevice compares a discovered device and a matchingexisting device, and updates the existing
+// device network address and port if necessary
 func (d *Driver) updateExistingDevice(device models.Device, discDev sdkModel.DiscoveredDevice) error {
 	shouldUpdate := false
 	if device.OperatingState == models.Down {
