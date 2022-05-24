@@ -423,7 +423,6 @@ func (d *Driver) Discover() {
 	}
 	// pass the discovered devices to the EdgeX SDK to be passed through to the provision watchers
 	filtered := d.discoverFilter(discoveredDevices)
-	d.checkConnection(discoveredDevices)
 	d.deviceCh <- filtered
 }
 
