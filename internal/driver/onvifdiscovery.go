@@ -267,23 +267,29 @@ func (d *Driver) discoverFilter(discovered []sdkModel.DiscoveredDevice) (filtere
 	return filtered
 }
 
-// checkConnection compares all existing devices and searches for a matching discovered device
-// it updates all disconnected devices with its status
-func (d *Driver) checkConnection(discovered []sdkModel.DiscoveredDevice) {
-	devMap := d.makeDeviceMap() // create comparison map
-	var connected bool
-	for name, dev := range devMap {
-		connected = false
-		for _, discDev := range discovered {
-			if discDev.Protocols["Onvif"]["EndpointRefAddress"] == name {
-				connected = true
-				// dev.LastConnected = time.Now().UTC()
-				break
-			}
-		}
-		if !connected {
-			dev.OperatingState = contract.Down
-			d.svc.UpdateDevice(dev)
-		}
-	}
-}
+// // checkConnection compares all existing devices and searches for a matching discovered device
+// // it updates all disconnected devices with its status
+// func (d *Driver) checkConnection(discovered []sdkModel.DiscoveredDevice) {
+// 	devMap := d.makeDeviceMap() // create comparison map
+// 	var connected bool
+// 	for name, dev := range devMap {
+// 		connected = false
+// 		for _, discDev := range discovered {
+// 			if discDev.Protocols["Onvif"]["EndpointRefAddress"] == name {
+// 				connected = true
+// 				dev.LastConnected = time.Now().Unix()
+// 				break
+// 			}
+// 		}
+// 		if !connected {
+// 			elapsed := time.Now().Unix() - dev.LastConnected
+// 			if elapsed > 200 {
+// 				// Decommissioned
+// 			} else {
+// 				// Maintenance
+// 			}
+// 			dev.OperatingState = contract.Down
+// 			d.svc.UpdateDevice(dev)
+// 		}
+// 	}
+// }
