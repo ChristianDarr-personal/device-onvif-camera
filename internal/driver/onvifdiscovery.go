@@ -241,7 +241,7 @@ func (d *Driver) discoverFilter(discovered []sdkModel.DiscoveredDevice) (filtere
 	devMap := d.makeDeviceMap() // create comparison map
 	checked := make(map[string]bool)
 	for _, dev := range discovered {
-		endRef := dev.Protocols["Onvif"]["EndpointRefAddress"]
+		endRef := dev.Protocols[OnvifProtocol][EndpointRefAddress]
 		_, prevDisc := checked[endRef]
 		if !prevDisc {
 			if metaDev, found := devMap[endRef]; found {
@@ -252,7 +252,7 @@ func (d *Driver) discoverFilter(discovered []sdkModel.DiscoveredDevice) (filtere
 				duplicate := false
 				// check if a matching device was discovered by another method
 				for _, filterDev := range filtered {
-					if endRef == filterDev.Protocols["Onvif"]["EndpointRefAddress"] {
+					if endRef == filterDev.Protocols[OnvifProtocol][EndpointRefAddress] {
 						duplicate = true
 						break
 					}
