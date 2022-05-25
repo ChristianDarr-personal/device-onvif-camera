@@ -350,7 +350,7 @@ func (d *Driver) RemoveDevice(deviceName string, protocols map[string]models.Pro
 
 // createOnvifClient creates the Onvif client used to communicate with the specified the device
 func (d *Driver) createOnvifClient(deviceName string) error {
-	dev, err := sdk.RunningService().GetDeviceByName(deviceName) // should this be by endpoint reference?
+	dev, err := sdk.RunningService().GetDeviceByName(deviceName)
 	if err != nil {
 		return errors.NewCommonEdgeXWrapper(err)
 	}
@@ -423,10 +423,6 @@ func (d *Driver) Discover() {
 	}
 	// pass the discovered devices to the EdgeX SDK to be passed through to the provision watchers
 	filtered := d.discoverFilter(discoveredDevices)
-<<<<<<< HEAD
-=======
-	d.checkConnection(discoveredDevices)
->>>>>>> 47959255aa333e626ea7729bce5639d22c726235
 	d.deviceCh <- filtered
 }
 
