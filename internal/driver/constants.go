@@ -13,7 +13,12 @@ const (
 	AuthMode           = "AuthMode"
 	SecretPath         = "SecretPath"
 	EndpointRefAddress = "EndpointRefAddress"
+	DeviceStatus       = "DeviceStatues"
 
+	Reachable     = "Reachable"
+	UpWithAuth    = "UpWithAuth"
+	UpWithoutAuth = "UpWithoutAuth"
+	Down          = "Down"
 	// Service is resource attribute and indicates the web service for the Onvif
 	Service = "service"
 	// GetFunction is resource attribute and indicates the SOAP action for the specified web service, it is used for the read operation

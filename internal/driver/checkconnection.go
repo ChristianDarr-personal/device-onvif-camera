@@ -16,42 +16,47 @@ import (
 func (d *Driver) connect() {
 	devMap := d.makeDeviceMap()
 	for _, dev := range devMap {
-		errAuth := d.testConnectionAuth(dev)
-		if errAuth == nil { // I feel like this is wrong
+		okAuth := d.testConnectionAuth(dev)
+		if okAuth { // I feel like this is wrong
 			continue
 		}
-		errNoAuth := d.testConnectionNoAuth(dev)
-		if errNoAuth == nil {
+		okNoAuth := d.testConnectionNoAuth(dev)
+		if okNoAuth {
 			continue
 		}
-		d.probe(dev.Protocols["Onvif"]["Address"], dev.Protocols["Onvif"]["Port"])
+		okProbe := d.probe(dev, dev.Protocols[OnvifProtocol][Address], dev.Protocols[OnvifProtocol][Port])
+		if okProbe {
+			continue
+		}
+		dev.Protocols[OnvifProtocol][DeviceStatus] = Down
+
 	}
 }
 
-func (d *Driver) testConnectionAuth(dev models.Device) errors.EdgeX {
+func (d *Driver) testConnectionAuth(dev models.Device) bool {
 	_, edgexErr := d.getStreamUri(dev) // chose another function
 	if edgexErr != nil {
-		d.lc.Warnf("%s connected with authentication", dev.Name)
-		// update "reachable"
-		// update "control level"
+		d.lc.Warnf("%s did not connect with authentication", dev.Name)
+		return false
 	} else {
+		dev.Protocols[OnvifProtocol][DeviceStatus] = UpWithAuth
 		dev.LastConnected = time.Now().Unix() // how to update this automatically
+		d.svc.UpdateDevice(dev)
+		return true
 	}
-	d.svc.UpdateDevice(dev)
-	return errors.NewCommonEdgeXWrapper(edgexErr)
 }
 
-func (d *Driver) testConnectionNoAuth(dev models.Device) errors.EdgeX {
+func (d *Driver) testConnectionNoAuth(dev models.Device) bool {
 	_, edgexErr := d.getDeviceInformation(dev)
 	if edgexErr != nil {
-		d.lc.Warnf("%s connected without authentication", dev.Name)
-		// update "reachable"
-		// update "control level"
+		d.lc.Warnf("%s did not connect without authentication", dev.Name) // TODO: better message
+		return false
 	} else {
+		dev.Protocols[OnvifProtocol][DeviceStatus] = UpWithoutAuth
 		dev.LastConnected = time.Now().Unix() // how to update this automatically
+		d.svc.UpdateDevice(dev)
+		return true
 	}
-	d.svc.UpdateDevice(dev)
-	return errors.NewCommonEdgeXWrapper(edgexErr)
 }
 
 func (d *Driver) getStreamUri(dev models.Device) (devInfo *device.GetDeviceInformationResponse, edgexErr errors.EdgeX) { //choose proper func later
@@ -72,7 +77,7 @@ func (d *Driver) getStreamUri(dev models.Device) (devInfo *device.GetDeviceInfor
 
 // probe attempts to make a connection to a specific ip and port list to determine
 // if there is a service listening at that ip+port.
-func (d *Driver) probe(host string, port string) error {
+func (d *Driver) probe(dev models.Device, host string, port string) bool {
 	addr := host + ":" + port
 	params := netscan.Params{
 		// split the comma separated string here to avoid issues with EdgeX's Consul implementation
@@ -86,10 +91,8 @@ func (d *Driver) probe(host string, port string) error {
 	params.Logger.Tracef("Dial: %s", addr)
 	conn, err := net.DialTimeout(params.NetworkProtocol, addr, params.Timeout)
 	if err != nil {
-		// update "reachable"
-		// update "control level"
 		params.Logger.Tracef(err.Error())
-		return err
+		return false
 		// // EHOSTUNREACH specifies that the host is un-reachable or there is no route to host.
 		// // EHOSTDOWN specifies that the network or host is down.
 		// // If either of these are the error, do not bother probing the host any longer.
@@ -98,7 +101,10 @@ func (d *Driver) probe(host string, port string) error {
 		// 	return err
 		// }
 	} else {
+		dev.Protocols[OnvifProtocol][DeviceStatus] = Reachable
+		dev.LastConnected = time.Now().Unix() // how to update this automatically
+		d.svc.UpdateDevice(dev)
 		defer conn.Close()
+		return true
 	}
-	return nil
 }

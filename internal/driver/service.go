@@ -6,6 +6,8 @@
 package driver
 
 import (
+	"errors"
+
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/clients/logger"
 	contract "github.com/edgexfoundry/go-mod-core-contracts/v2/models"
@@ -34,4 +36,16 @@ type DeviceSDKService struct {
 // DriverConfigs retrieves the driver specific configuration
 func (s *DeviceSDKService) DriverConfigs() map[string]string {
 	return service.DriverConfigs()
+}
+
+func (s *DeviceSDKService) SetDeviceStatus(name string, status string) error {
+	// workaround: the device-service-sdk's uses core-contracts for the API URLs,
+	// but the metadata service API for opstate updates changed between v1.1.0 and v1.2.0.
+	d, err := s.GetDeviceByName(name)
+	if err != nil {
+		return errors.New("no such device")
+	}
+
+	d.Protocols[OnvifProtocol][DeviceStatus] = status
+	return s.UpdateDevice(d)
 }
