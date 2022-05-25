@@ -302,10 +302,10 @@ func (d *Driver) updateExistingDevice(device models.Device, discDev sdkModel.Dis
 		shouldUpdate = true
 	}
 
-	existAddr := device.Protocols["Onvif"]["Address"]
-	existPort := device.Protocols["Onvif"]["Port"]
-	discAddr := discDev.Protocols["Onvif"]["Address"]
-	discPort := discDev.Protocols["Onvif"]["Port"]
+	existAddr := device.Protocols[OnvifProtocol][Address]
+	existPort := device.Protocols[OnvifProtocol][Port]
+	discAddr := discDev.Protocols[OnvifProtocol][Address]
+	discPort := discDev.Protocols[OnvifProtocol][Port]
 	if discAddr == "" ||
 		discPort == "" ||
 		existAddr != discAddr ||
@@ -314,8 +314,8 @@ func (d *Driver) updateExistingDevice(device models.Device, discDev sdkModel.Dis
 			"oldInfo", fmt.Sprintf("%+v", existAddr+":"+existPort),
 			"discoveredInfo", fmt.Sprintf("%+v", discAddr+":"+discPort))
 
-		device.Protocols["Onvif"]["Address"] = discAddr
-		device.Protocols["Onvif"]["Port"] = discPort
+		device.Protocols[OnvifProtocol][Address] = discAddr
+		device.Protocols[OnvifProtocol][Port] = discPort
 
 		device.OperatingState = models.Up
 		shouldUpdate = true
