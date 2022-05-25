@@ -350,7 +350,7 @@ func (d *Driver) RemoveDevice(deviceName string, protocols map[string]models.Pro
 
 // createOnvifClient creates the Onvif client used to communicate with the specified the device
 func (d *Driver) createOnvifClient(deviceName string) error {
-	dev, err := sdk.RunningService().GetDeviceByName(deviceName) // should this be by endpoint reference?
+	dev, err := sdk.RunningService().GetDeviceByName(deviceName)
 	if err != nil {
 		return errors.NewCommonEdgeXWrapper(err)
 	}
