@@ -20,6 +20,7 @@ import (
 	"github.com/edgexfoundry/device-onvif-camera/pkg/netscan"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	sdk "github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
+
 	"github.com/edgexfoundry/go-mod-bootstrap/v2/bootstrap/secret"
 	"github.com/edgexfoundry/go-mod-bootstrap/v2/bootstrap/startup"
 	"github.com/edgexfoundry/go-mod-bootstrap/v2/config"
@@ -292,6 +293,50 @@ func (d *Driver) UpdateDevice(deviceName string, protocols map[string]models.Pro
 	return nil
 }
 
+// updateExistingDevice compares a discovered device and a matchingexisting device, and updates the existing
+// device network address and port if necessary
+func (d *Driver) updateExistingDevice(device models.Device, discDev sdkModel.DiscoveredDevice) error {
+	shouldUpdate := false
+	if device.OperatingState == models.Down {
+		device.OperatingState = models.Up
+		shouldUpdate = true
+	}
+
+	existAddr := device.Protocols[OnvifProtocol][Address]
+	existPort := device.Protocols[OnvifProtocol][Port]
+	discAddr := discDev.Protocols[OnvifProtocol][Address]
+	discPort := discDev.Protocols[OnvifProtocol][Port]
+	if discAddr == "" ||
+		discPort == "" ||
+		existAddr != discAddr ||
+		existPort != discPort {
+		d.lc.Info("Existing device has been discovered with a different network address.",
+			"oldInfo", fmt.Sprintf("%+v", existAddr+":"+existPort),
+			"discoveredInfo", fmt.Sprintf("%+v", discAddr+":"+discPort))
+
+		device.Protocols[OnvifProtocol][Address] = discAddr
+		device.Protocols[OnvifProtocol][Port] = discPort
+
+		device.OperatingState = models.Up
+		shouldUpdate = true
+	}
+
+	if !shouldUpdate {
+		// if both methods of dicovery are used, this message will print for the every camera discovered by netscan
+		d.lc.Warn("Re-discovered existing device at the same network address, nothing to do")
+		return nil
+	}
+
+	if err := d.svc.UpdateDevice(device); err != nil {
+		d.lc.Error("There was an error updating the network address for an existing device.",
+			"deviceName", device.Name,
+			"error", err)
+		return err
+	}
+
+	return nil
+}
+
 // RemoveDevice is a callback function that is invoked
 // when a Device associated with this Device Service is removed
 func (d *Driver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
@@ -377,7 +422,8 @@ func (d *Driver) Discover() {
 		discoveredDevices = d.discoverNetscan(ctx, discoveredDevices)
 	}
 	// pass the discovered devices to the EdgeX SDK to be passed through to the provision watchers
-	d.deviceCh <- discoveredDevices
+	filtered := d.discoverFilter(discoveredDevices)
+	d.deviceCh <- filtered
 }
 
 // multicast enable/disable via config option
@@ -414,7 +460,7 @@ func (d *Driver) discoverNetscan(ctx context.Context, discovered []sdkModel.Disc
 		Logger:          d.lc,
 		NetworkProtocol: netscan.NetworkUDP,
 	}
-
+	// devMap := d.makeDeviceMap()
 	t0 := time.Now()
 	result := netscan.AutoDiscover(ctx, NewOnvifProtocolDiscovery(d), params)
 	if ctx.Err() != nil {
