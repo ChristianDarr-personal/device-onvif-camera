@@ -1,18 +1,19 @@
 package driver
 
 import (
+	"context"
 	"fmt"
-	"net"
-	"strings"
+	"net/http"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
-	"github.com/IOTechSystems/onvif"
-	"github.com/IOTechSystems/onvif/device"
-	"github.com/edgexfoundry/device-onvif-camera/pkg/netscan"
-	"github.com/edgexfoundry/go-mod-core-contracts/v2/errors"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 )
 
+// connect loops through all discovered and tries to determine the most accurate operating state
 func (d *Driver) connect() {
 	devMap := d.makeDeviceMap()
 	for _, dev := range devMap {
@@ -29,14 +30,17 @@ func (d *Driver) connect() {
 			continue
 		}
 		dev.Protocols[OnvifProtocol][DeviceStatus] = Down
-
+		d.svc.UpdateDevice(dev)
 	}
+	fmt.Printf("d.svc: %v\n", d.svc)
 }
 
+// testConnectionAuth will try to send a command to a camera using authentication
+// and return a bool indicating success or failure
 func (d *Driver) testConnectionAuth(dev models.Device) bool {
-	_, edgexErr := d.getStreamUri(dev) // chose another function
+	_, edgexErr := d.getStreamUri(dev) // TODO: chose another function
 	if edgexErr != nil {
-		d.lc.Warnf("%s did not connect with authentication", dev.Name)
+		d.lc.Debugf("%s did not connect with authentication", dev.Name)
 		return false
 	} else {
 		dev.Protocols[OnvifProtocol][DeviceStatus] = UpWithAuth
@@ -46,10 +50,13 @@ func (d *Driver) testConnectionAuth(dev models.Device) bool {
 	}
 }
 
+// After failing to get a connection using authentication, it calls this function
+// to try to reach the camera using a command that doesn't require authorization,
+// and return a bool indicating success or failure
 func (d *Driver) testConnectionNoAuth(dev models.Device) bool {
 	_, edgexErr := d.getDeviceInformation(dev)
 	if edgexErr != nil {
-		d.lc.Warnf("%s did not connect without authentication", dev.Name) // TODO: better message
+		d.lc.Debugf("%s did not connect without authentication", dev.Name) // TODO: better message
 		return false
 	} else {
 		dev.Protocols[OnvifProtocol][DeviceStatus] = UpWithoutAuth
@@ -59,52 +66,70 @@ func (d *Driver) testConnectionNoAuth(dev models.Device) bool {
 	}
 }
 
-func (d *Driver) getStreamUri(dev models.Device) (devInfo *device.GetDeviceInformationResponse, edgexErr errors.EdgeX) { //choose proper func later
-	devClient, edgexErr := d.newTemporaryOnvifClient(dev)
-	if edgexErr != nil {
-		return nil, errors.NewCommonEdgeXWrapper(edgexErr)
-	}
-	devInfoResponse, edgexErr := devClient.callOnvifFunction(onvif.DeviceWebService, onvif.GetStreamUri, []byte{})
-	if edgexErr != nil {
-		return nil, errors.NewCommonEdgeXWrapper(edgexErr)
-	}
-	devInfo, ok := devInfoResponse.(*device.GetDeviceInformationResponse)
-	if !ok {
-		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("invalid GetStreamUri for the camera %s", dev.Name), nil)
-	}
-	return devInfo, nil
-}
-
 // probe attempts to make a connection to a specific ip and port list to determine
 // if there is a service listening at that ip+port.
 func (d *Driver) probe(dev models.Device, host string, port string) bool {
 	addr := host + ":" + port
-	params := netscan.Params{
-		// split the comma separated string here to avoid issues with EdgeX's Consul implementation
-		Subnets:         strings.Split(d.config.DiscoverySubnets, ","),
-		AsyncLimit:      d.config.ProbeAsyncLimit,
-		Timeout:         time.Duration(d.config.ProbeTimeoutMillis) * time.Millisecond,
-		ScanPorts:       []string{wsDiscoveryPort},
-		Logger:          d.lc,
-		NetworkProtocol: netscan.NetworkUDP,
-	}
-	params.Logger.Tracef("Dial: %s", addr)
-	conn, err := net.DialTimeout(params.NetworkProtocol, addr, params.Timeout)
+	_, err := http.Get(addr)
 	if err != nil {
-		params.Logger.Tracef(err.Error())
+		d.lc.Debugf("%s did not connect wwith probe", dev.Name) // TODO: better message
 		return false
-		// // EHOSTUNREACH specifies that the host is un-reachable or there is no route to host.
-		// // EHOSTDOWN specifies that the network or host is down.
-		// // If either of these are the error, do not bother probing the host any longer.
-		// if netErrors.Is(err, syscall.EHOSTUNREACH) || netErrors.Is(err, syscall.EHOSTDOWN) {
-		// 	// quit probing this host
-		// 	return err
-		// }
-	} else {
-		dev.Protocols[OnvifProtocol][DeviceStatus] = Reachable
-		dev.LastConnected = time.Now().Unix() // how to update this automatically
-		d.svc.UpdateDevice(dev)
-		defer conn.Close()
-		return true
 	}
+	dev.Protocols[OnvifProtocol][DeviceStatus] = Reachable
+	dev.LastConnected = time.Now().Unix() // how to update this automatically
+	d.svc.UpdateDevice(dev)
+	return true
+}
+
+// taskLoop is our main event loop for async processes
+// that can't be modeled within the SDK's pipeline event loop.
+//
+// Namely, it launches scheduled tasks and configuration changes.
+// Since nearly every round through this loop must read or write the inventory,
+// this taskLoop ensures the modifications are done safely
+// without requiring a ton of lock contention on the inventory itself.
+func (d *Driver) taskLoop(ctx context.Context) {
+	interval := d.config.CheckConnectionInterval
+	connectionTicker := time.NewTicker(time.Duration(interval) * time.Second)
+	eventCh := make(chan bool)
+
+	defer func() {
+		connectionTicker.Stop()
+	}()
+
+	d.lc.Info("Starting task loop.")
+	for {
+		select {
+		case <-ctx.Done():
+			d.lc.Info("Stopping task loop.")
+			close(eventCh)
+			d.lc.Info("Task loop stopped.")
+			return
+		case <-connectionTicker.C:
+			d.connect()
+		}
+	}
+}
+
+// RunUntilCancelled sets up the function pipeline and runs it. This function will not return
+// until the function pipeline is complete unless an error occurred running it.
+func (d *Driver) RunUntilCancelled() error {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		d.taskLoop(ctx)
+		d.lc.Info("Task loop has exited.")
+	}()
+
+	go func() {
+		signals := make(chan os.Signal, 1)
+		signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+		s := <-signals
+		d.lc.Info(fmt.Sprintf("Received '%s' signal from OS.", s.String()))
+		cancel() // signal the taskLoop to finish
+	}()
+	return nil
 }

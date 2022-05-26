@@ -13,7 +13,7 @@ const (
 	AuthMode           = "AuthMode"
 	SecretPath         = "SecretPath"
 	EndpointRefAddress = "EndpointRefAddress"
-	DeviceStatus       = "DeviceStatues"
+	DeviceStatus       = "DeviceStatus"
 
 	Reachable     = "Reachable"
 	UpWithAuth    = "UpWithAuth"

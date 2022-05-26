@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -112,7 +113,9 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 	if edgexErr != nil {
 		return errors.NewCommonEdgeXWrapper(edgexErr)
 	}
-
+	if err := d.RunUntilCancelled(); err != nil {
+		os.Exit(1)
+	}
 	d.lc.Info("Driver initialized.")
 	return nil
 }

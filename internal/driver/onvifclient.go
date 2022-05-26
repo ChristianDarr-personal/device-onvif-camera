@@ -125,6 +125,22 @@ func getCameraEventResourceByDeviceName(deviceName string) (r models.DeviceResou
 	return r, errors.NewCommonEdgeX(errors.KindEntityDoesNotExist, fmt.Sprintf("device resource with Getfunciton '%s' not found", CameraEvent), nil)
 }
 
+func (d *Driver) getStreamUri(dev models.Device) (devInfo *device.GetDeviceInformationResponse, edgexErr errors.EdgeX) { // TODO: change function
+	devClient, edgexErr := d.newTemporaryOnvifClient(dev)
+	if edgexErr != nil {
+		return nil, errors.NewCommonEdgeXWrapper(edgexErr)
+	}
+	devInfoResponse, edgexErr := devClient.callOnvifFunction(onvif.DeviceWebService, onvif.GetStreamUri, []byte{})
+	if edgexErr != nil {
+		return nil, errors.NewCommonEdgeXWrapper(edgexErr)
+	}
+	devInfo, ok := devInfoResponse.(*device.GetDeviceInformationResponse)
+	if !ok {
+		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("invalid GetStreamUri for the camera %s", dev.Name), nil)
+	}
+	return devInfo, nil
+}
+
 func deviceAddress(cameraInfo *CameraInfo) string {
 	return fmt.Sprintf("%s:%d", cameraInfo.Address, cameraInfo.Port)
 }
