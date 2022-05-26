@@ -460,7 +460,7 @@ func (d *Driver) discoverNetscan(ctx context.Context, discovered []sdkModel.Disc
 		Logger:          d.lc,
 		NetworkProtocol: netscan.NetworkUDP,
 	}
-	// devMap := d.makeDeviceMap()
+
 	t0 := time.Now()
 	result := netscan.AutoDiscover(ctx, NewOnvifProtocolDiscovery(d), params)
 	if ctx.Err() != nil {
