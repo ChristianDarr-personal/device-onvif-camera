@@ -237,33 +237,30 @@ func (d *Driver) makeDeviceMap() map[string]contract.Device {
 // discoverFilter iterates through the discovered devices, and returns any that are not duplicates
 // of devices in metadata or are from an alternate discovery method
 // will return an empty slice if no new devices are discovered
-func (d *Driver) discoverFilter(discovered []sdkModel.DiscoveredDevice) (filtered []sdkModel.DiscoveredDevice) {
-	devMap := d.makeDeviceMap() // create comparison map
-	checked := make(map[string]bool)
-	for _, dev := range discovered {
-		endRef := dev.Protocols[OnvifProtocol][EndpointRefAddress]
-		_, prevDisc := checked[endRef]
-		if !prevDisc {
-			if metaDev, found := devMap[endRef]; found {
-				// if device is already in metadata, update it if necessary
-				checked[endRef] = true
-				d.updateExistingDevice(metaDev, dev)
-			} else {
-				duplicate := false
-				// check if a matching device was discovered by another method
-				for _, filterDev := range filtered {
-					if endRef == filterDev.Protocols[OnvifProtocol][EndpointRefAddress] {
-						duplicate = true
-						break
-					}
-				}
-				// if not a part of metadata or not discovered by another method, send to EdgeX
-				if !duplicate {
-					filtered = append(filtered, dev) // send new device to edgex if there is no existing match
-				}
-			}
+func (d *Driver) discoverFilter(discoveredDevices []sdkModel.DiscoveredDevice) (filtered []sdkModel.DiscoveredDevice) {
+	// filter out duplicate discovered devices by endpoint reference
+	discoveredMap := make(map[string]sdkModel.DiscoveredDevice)
+	for _, device := range discoveredDevices {
+		endpointRef := device.Protocols[OnvifProtocol][EndpointRefAddress]
+		if _, found := discoveredMap[endpointRef]; !found {
+			discoveredMap[endpointRef] = device
 		}
 	}
+
+	existingDevices := d.makeDeviceMap() // create comparison map
+
+	// loop through discovered devices and see if they are already discovered
+	for endpointRef, device := range discoveredMap {
+		if existingDevice, found := existingDevices[endpointRef]; found {
+			if err := d.updateExistingDevice(existingDevice, device); err != nil {
+				d.lc.Errorf("error occurred while updating existing device %s: %s", existingDevice.Name, err.Error())
+			}
+			continue // skip registering existing device
+		}
+		// if device was not found, add it to the list of new devices to be registered with EdgeX
+		filtered = append(filtered, device)
+	}
+
 	return filtered
 }
 
