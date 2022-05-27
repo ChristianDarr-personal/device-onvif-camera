@@ -79,7 +79,7 @@ func (d *Driver) newOnvifClient(device models.Device) (*OnvifClient, errors.Edge
 		},
 	})
 	if err != nil {
-		return nil, errors.NewCommonEdgeX(errors.KindServiceUnavailable, "failed to initial Onvif device client", err)
+		return nil, errors.NewCommonEdgeX(errors.KindServiceUnavailable, "failed to initialize Onvif device client", err)
 	}
 
 	resource, err := getCameraEventResourceByDeviceName(device.Name)
@@ -122,23 +122,7 @@ func getCameraEventResourceByDeviceName(deviceName string) (r models.DeviceResou
 			return r, nil
 		}
 	}
-	return r, errors.NewCommonEdgeX(errors.KindEntityDoesNotExist, fmt.Sprintf("device resource with Getfunciton '%s' not found", CameraEvent), nil)
-}
-
-func (d *Driver) getStreamUri(dev models.Device) (devInfo *device.GetDeviceInformationResponse, edgexErr errors.EdgeX) { // TODO: change function
-	devClient, edgexErr := d.newTemporaryOnvifClient(dev)
-	if edgexErr != nil {
-		return nil, errors.NewCommonEdgeXWrapper(edgexErr)
-	}
-	devInfoResponse, edgexErr := devClient.callOnvifFunction(onvif.DeviceWebService, onvif.GetStreamUri, []byte{})
-	if edgexErr != nil {
-		return nil, errors.NewCommonEdgeXWrapper(edgexErr)
-	}
-	devInfo, ok := devInfoResponse.(*device.GetDeviceInformationResponse)
-	if !ok {
-		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("invalid GetStreamUri for the camera %s", dev.Name), nil)
-	}
-	return devInfo, nil
+	return r, errors.NewCommonEdgeX(errors.KindEntityDoesNotExist, fmt.Sprintf("device resource with Getfunction '%s' not found", CameraEvent), nil)
 }
 
 func deviceAddress(cameraInfo *CameraInfo) string {

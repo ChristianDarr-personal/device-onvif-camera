@@ -14,11 +14,13 @@ import (
 )
 
 // connect loops through all discovered and tries to determine the most accurate operating state
+// test Auth mode first becuase that is expected use case
 func (d *Driver) connect() {
+	d.lc.Info("Connect has been called")
 	devMap := d.makeDeviceMap()
 	for _, dev := range devMap {
 		okAuth := d.testConnectionAuth(dev)
-		if okAuth { // I feel like this is wrong
+		if okAuth {
 			continue
 		}
 		okNoAuth := d.testConnectionNoAuth(dev)
@@ -32,15 +34,14 @@ func (d *Driver) connect() {
 		dev.Protocols[OnvifProtocol][DeviceStatus] = Down
 		d.svc.UpdateDevice(dev)
 	}
-	fmt.Printf("d.svc: %v\n", d.svc)
 }
 
 // testConnectionAuth will try to send a command to a camera using authentication
 // and return a bool indicating success or failure
 func (d *Driver) testConnectionAuth(dev models.Device) bool {
-	_, edgexErr := d.getStreamUri(dev) // TODO: chose another function
+	_, edgexErr := d.getDeviceInformation(dev)
 	if edgexErr != nil {
-		d.lc.Debugf("%s did not connect with authentication", dev.Name)
+		d.lc.Debugf("Connection to %s failed when using authentication", dev.Name)
 		return false
 	} else {
 		dev.Protocols[OnvifProtocol][DeviceStatus] = UpWithAuth
@@ -54,9 +55,9 @@ func (d *Driver) testConnectionAuth(dev models.Device) bool {
 // to try to reach the camera using a command that doesn't require authorization,
 // and return a bool indicating success or failure
 func (d *Driver) testConnectionNoAuth(dev models.Device) bool {
-	_, edgexErr := d.getDeviceInformation(dev)
+	_, edgexErr := d.newTemporaryOnvifClient(dev)
 	if edgexErr != nil {
-		d.lc.Debugf("%s did not connect without authentication", dev.Name) // TODO: better message
+		d.lc.Debugf("Connection to %s failed when not using authentication", dev.Name)
 		return false
 	} else {
 		dev.Protocols[OnvifProtocol][DeviceStatus] = UpWithoutAuth
@@ -72,8 +73,7 @@ func (d *Driver) probe(dev models.Device, host string, port string) bool {
 	addr := host + ":" + port
 	_, err := http.Get(addr)
 	if err != nil {
-		d.lc.Debugf("%s did not connect wwith probe", dev.Name) // TODO: better message
-		return false
+		d.lc.Debugf("Connection to %s failed when using simple http request", dev.Name)
 	}
 	dev.Protocols[OnvifProtocol][DeviceStatus] = Reachable
 	dev.LastConnected = time.Now().Unix() // how to update this automatically

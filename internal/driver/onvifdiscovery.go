@@ -95,6 +95,7 @@ func (d *Driver) createDiscoveredDevice(onvifDevice onvif.Device) (sdkModel.Disc
 				AuthMode:           d.config.DefaultAuthMode,
 				SecretPath:         d.config.DefaultSecretPath,
 				EndpointRefAddress: endpointRefAddr,
+				DeviceStatus:       Reachable,
 			},
 		},
 	}
@@ -222,7 +223,7 @@ func (d *Driver) makeDeviceMap() map[string]contract.Device {
 			continue
 		}
 
-		endpointRef := onvifInfo["EndpointRefAddress"]
+		endpointRef := onvifInfo[EndpointRefAddress]
 		if endpointRef == "" {
 			d.lc.Warnf("Registered device %s is missing required %s protocol information: EndpointRefAddress.",
 				dev.Name, OnvifProtocol)
