@@ -13,12 +13,27 @@ const (
 	AuthMode           = "AuthMode"
 	SecretPath         = "SecretPath"
 	EndpointRefAddress = "EndpointRefAddress"
-	DeviceStatus       = "DeviceStatus"
+	LastSeen           = "LastSeen"
 
-	Reachable     = "Reachable"
+	// Field in OnvifProtocol map
+	DeviceStatus = "DeviceStatus"
+	// Enumerations for DeviceStatus
 	UpWithAuth    = "UpWithAuth"
 	UpWithoutAuth = "UpWithoutAuth"
-	Down          = "Down"
+	Reachable     = "Reachable"
+	Unreachable   = "Unreachable"
+
+	// Field in OnvifProtocol map
+	DeviceStatusDescription = "DeviceStatusDescription"
+	// Enumerations for DeviceStatusDescription
+	UpWithAuthDesc    = "Up and has working credentials"
+	UpWithoutAuthDesc = "Up but does not have working credentials"
+	ReachableDesc     = "Discoverable but cannot receive commands"
+	UnreachableDesc   = "Cannot be discovered"
+
+	// Maximum interval for checkStatus interval
+	maxStatusInterval = 300
+
 	// Service is resource attribute and indicates the web service for the Onvif
 	Service = "service"
 	// GetFunction is resource attribute and indicates the SOAP action for the specified web service, it is used for the read operation

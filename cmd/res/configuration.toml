@@ -132,5 +132,6 @@ ProbeTimeoutMillis = "2000"
 # It is especially important to have this configured in the case of larger subnets such as /16 and /8
 MaxDiscoverDurationSeconds = "300"
 
-# The interval at which the service will check the connection of all known cameras
-CheckConnectionInterval = "30"
+# The interval at which the service will check the connection of all known cameras and update the device status 
+# Maximum 300s
+CheckStatusInterval = "15"

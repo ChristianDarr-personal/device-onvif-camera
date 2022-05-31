@@ -90,12 +90,14 @@ func (d *Driver) createDiscoveredDevice(onvifDevice onvif.Device) (sdkModel.Disc
 		Name: xaddr,
 		Protocols: map[string]contract.ProtocolProperties{
 			OnvifProtocol: {
-				Address:            address,
-				Port:               port,
-				AuthMode:           d.config.DefaultAuthMode,
-				SecretPath:         d.config.DefaultSecretPath,
-				EndpointRefAddress: endpointRefAddr,
-				DeviceStatus:       Reachable,
+				Address:                 address,
+				Port:                    port,
+				AuthMode:                d.config.DefaultAuthMode,
+				SecretPath:              d.config.DefaultSecretPath,
+				EndpointRefAddress:      endpointRefAddr,
+				DeviceStatus:            Reachable,
+				DeviceStatusDescription: ReachableDesc,
+				LastSeen:                time.Now().Format(time.UnixDate),
 			},
 		},
 	}
@@ -110,6 +112,9 @@ func (d *Driver) createDiscoveredDevice(onvifDevice onvif.Device) (sdkModel.Disc
 	var discovered sdkModel.DiscoveredDevice
 	if edgexErr != nil {
 		d.lc.Warnf("failed to get the device information for the camera %s, %v", endpointRefAddr, edgexErr)
+		dev.Protocols[OnvifProtocol][DeviceStatus] = Reachable // update device status in this error case
+		dev.Protocols[OnvifProtocol][DeviceStatusDescription] = ReachableDesc
+		dev.Protocols[OnvifProtocol][LastSeen] = time.Now().Format(time.UnixDate)
 		discovered = sdkModel.DiscoveredDevice{
 			Name:        endpointRefAddr,
 			Protocols:   dev.Protocols,
@@ -124,6 +129,8 @@ func (d *Driver) createDiscoveredDevice(onvifDevice onvif.Device) (sdkModel.Disc
 		dev.Protocols[OnvifProtocol][SerialNumber] = devInfo.SerialNumber
 		dev.Protocols[OnvifProtocol][HardwareId] = devInfo.HardwareId
 		dev.Protocols[OnvifProtocol][DeviceStatus] = UpWithAuth
+		dev.Protocols[OnvifProtocol][DeviceStatusDescription] = UpWithAuthDesc
+		dev.Protocols[OnvifProtocol][LastSeen] = time.Now().Format(time.UnixDate)
 
 		// Spaces are not allowed in the device name
 		deviceName := fmt.Sprintf("%s-%s-%s",
@@ -268,30 +275,3 @@ func (d *Driver) discoverFilter(discovered []sdkModel.DiscoveredDevice) (filtere
 	}
 	return filtered
 }
-
-// // checkConnection compares all existing devices and searches for a matching discovered device
-// // it updates all disconnected devices with its status
-// func (d *Driver) checkConnection(discovered []sdkModel.DiscoveredDevice) {
-// 	devMap := d.makeDeviceMap() // create comparison map
-// 	var connected bool
-// 	for name, dev := range devMap {
-// 		connected = false
-// 		for _, discDev := range discovered {
-// 			if discDev.Protocols["Onvif"]["EndpointRefAddress"] == name {
-// 				connected = true
-// 				dev.LastConnected = time.Now().Unix()
-// 				break
-// 			}
-// 		}
-// 		if !connected {
-// 			elapsed := time.Now().Unix() - dev.LastConnected
-// 			if elapsed > 200 {
-// 				// Decommissioned
-// 			} else {
-// 				// Maintenance
-// 			}
-// 			dev.OperatingState = contract.Down
-// 			d.svc.UpdateDevice(dev)
-// 		}
-// 	}
-// }
