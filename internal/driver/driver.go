@@ -18,7 +18,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/edgexfoundry/device-onvif-camera/pkg/netscan"
+	"github.com/edgexfoundry/device-onvif-camera/internal/netscan"
+
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	sdk "github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
 
@@ -31,7 +32,7 @@ import (
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 
 	"github.com/IOTechSystems/onvif"
-	"github.com/IOTechSystems/onvif/device"
+	onvifdevice "github.com/IOTechSystems/onvif/device"
 	wsdiscovery "github.com/IOTechSystems/onvif/ws-discovery"
 )
 
@@ -64,7 +65,6 @@ type Driver struct {
 	lock         *sync.RWMutex
 	onvifClients map[string]*OnvifClient
 	serviceName  string
-	svc          ServiceWrapper
 }
 
 // Initialize performs protocol-specific initialization for the device
@@ -85,26 +85,22 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 	d.config = camConfig
 
 	deviceService := sdk.RunningService()
-	d.svc = &DeviceSDKService{
-		DeviceService: deviceService,
-		lc:            lc,
-	}
 
-	for _, dev := range deviceService.Devices() {
+	for _, device := range deviceService.Devices() {
 		// onvif client should not be created for the control-plane device
-		if dev.Name == d.serviceName {
+		if device.Name == d.serviceName {
 			continue
 		}
 
-		d.lc.Infof("Initializing onvif client for '%s' camera", dev.Name)
+		d.lc.Infof("Initializing onvif client for '%s' camera", device.Name)
 
-		onvifClient, err := d.newOnvifClient(dev)
+		onvifClient, err := d.newOnvifClient(device)
 		if err != nil {
-			d.lc.Errorf("failed to initialize onvif client for '%s' camera, skipping this device.", dev.Name)
+			d.lc.Errorf("failed to initialize onvif client for '%s' camera, skipping this device.", device.Name)
 			continue
 		}
 		d.lock.Lock()
-		d.onvifClients[dev.Name] = onvifClient
+		d.onvifClients[device.Name] = onvifClient
 		d.lock.Unlock()
 	}
 
@@ -128,13 +124,13 @@ func (d *Driver) getOnvifClient(deviceName string) (*OnvifClient, errors.EdgeX) 
 	defer d.lock.RUnlock()
 	onvifClient, ok := d.onvifClients[deviceName]
 	if !ok {
-		dev, err := sdk.RunningService().GetDeviceByName(deviceName)
+		device, err := sdk.RunningService().GetDeviceByName(deviceName)
 		if err != nil {
 			return nil, errors.NewCommonEdgeXWrapper(err)
 		}
-		onvifClient, err = d.newOnvifClient(dev)
+		onvifClient, err = d.newOnvifClient(device)
 		if err != nil {
-			return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("failed to initialize onvif client for '%s' camera", dev.Name), err)
+			return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("failed to initialize onvif client for '%s' camera", device.Name), err)
 		}
 		d.onvifClients[deviceName] = onvifClient
 	}
@@ -332,12 +328,13 @@ func (d *Driver) updateExistingDevice(device models.Device, discDev sdkModel.Dis
 		d.lc.Warn("Re-discovered existing device at the same network address, nothing to do")
 		return nil
 	}
-
-	if err := d.svc.UpdateDevice(device); err != nil {
+  
+	err := sdk.RunningService().UpdateDevice(device)
+	if err != nil {
 		d.lc.Error("There was an error updating the network address for an existing device.",
 			"deviceName", device.Name,
 			"error", err)
-		return err
+		return errors.NewCommonEdgeXWrapper(err)
 	}
 
 	return nil
@@ -356,13 +353,13 @@ func (d *Driver) RemoveDevice(deviceName string, protocols map[string]models.Pro
 
 // createOnvifClient creates the Onvif client used to communicate with the specified the device
 func (d *Driver) createOnvifClient(deviceName string) error {
-	dev, err := sdk.RunningService().GetDeviceByName(deviceName)
+	device, err := sdk.RunningService().GetDeviceByName(deviceName)
 	if err != nil {
 		return errors.NewCommonEdgeXWrapper(err)
 	}
-	onvifClient, err := d.newOnvifClient(dev)
+	onvifClient, err := d.newOnvifClient(device)
 	if err != nil {
-		return errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("failed to initialize onvif client for '%s' camera", dev.Name), err)
+		return errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("failed to initialize onvif client for '%s' camera", device.Name), err)
 	}
 
 	d.lock.Lock()
@@ -430,6 +427,30 @@ func (d *Driver) Discover() {
 	// pass the discovered devices to the EdgeX SDK to be passed through to the provision watchers
 	filtered := d.discoverFilter(discoveredDevices)
 	d.deviceCh <- filtered
+	d.rediscover() // update device
+}
+
+// updates the device service when rediscovered devices are found
+func (d *Driver) rediscover() {
+	deviceService := sdk.RunningService()
+
+	for _, device := range deviceService.Devices() {
+		// onvif client should not be created for the control-plane device
+		if device.Name == d.serviceName {
+			continue
+		}
+
+		d.lc.Infof("Updating onvif client for '%s' camera", device.Name)
+
+		onvifClient, err := d.newOnvifClient(device)
+		if err != nil {
+			d.lc.Errorf("failed to update onvif client for '%s' camera, skipping this device.", device.Name)
+			continue
+		}
+		d.lock.Lock()
+		d.onvifClients[device.Name] = onvifClient
+		d.lock.Unlock()
+	}
 }
 
 // multicast enable/disable via config option
@@ -438,12 +459,12 @@ func (d *Driver) discoverMulticast(discovered []sdkModel.DiscoveredDevice) []sdk
 	onvifDevices := wsdiscovery.GetAvailableDevicesAtSpecificEthernetInterface(d.config.DiscoveryEthernetInterface)
 	d.lc.Infof("Discovered %d device(s) in %v via multicast.", len(onvifDevices), time.Since(t0))
 	for _, onvifDevice := range onvifDevices {
-		dev, err := d.createDiscoveredDevice(onvifDevice)
+		device, err := d.createDiscoveredDevice(onvifDevice)
 		if err != nil {
 			d.lc.Warnf(err.Error())
 			continue
 		}
-		discovered = append(discovered, dev)
+		discovered = append(discovered, device)
 	}
 
 	return discovered
@@ -453,7 +474,7 @@ func (d *Driver) discoverMulticast(discovered []sdkModel.DiscoveredDevice) []sdk
 func (d *Driver) discoverNetscan(ctx context.Context, discovered []sdkModel.DiscoveredDevice) []sdkModel.DiscoveredDevice {
 
 	if len(strings.TrimSpace(d.config.DiscoverySubnets)) == 0 {
-		d.lc.Debug("discovery not performed, DiscoverySubnets are empty.")
+		d.lc.Warn("netscan discovery was called, but DiscoverySubnets are empty!")
 		return nil
 	}
 
@@ -476,14 +497,7 @@ func (d *Driver) discoverNetscan(ctx context.Context, discovered []sdkModel.Disc
 	d.lc.Debugf("NetScan result: %+v", result)
 	d.lc.Infof("Discovered %d device(s) in %v via netscan.", len(result), time.Since(t0))
 
-	for _, res := range result {
-		dev, ok := res.Info.(sdkModel.DiscoveredDevice)
-		if !ok {
-			d.lc.Warnf("unable to cast res.Info into sdkModel.DiscoveredDevice. type=%T", res.Info)
-			continue
-		}
-		discovered = append(discovered, dev)
-	}
+	discovered = append(discovered, result...)
 	return discovered
 }
 
@@ -497,8 +511,8 @@ func addressAndPort(xaddr string) (string, string) {
 	}
 }
 
-func (d *Driver) getDeviceInformation(dev models.Device) (devInfo *device.GetDeviceInformationResponse, edgexErr errors.EdgeX) {
-	devClient, edgexErr := d.newTemporaryOnvifClient(dev)
+func (d *Driver) getDeviceInformation(device models.Device) (devInfo *onvifdevice.GetDeviceInformationResponse, edgexErr errors.EdgeX) {
+	devClient, edgexErr := d.newTemporaryOnvifClient(device)
 	if edgexErr != nil {
 		return nil, errors.NewCommonEdgeXWrapper(edgexErr)
 	}
@@ -506,18 +520,18 @@ func (d *Driver) getDeviceInformation(dev models.Device) (devInfo *device.GetDev
 	if edgexErr != nil {
 		return nil, errors.NewCommonEdgeXWrapper(edgexErr)
 	}
-	devInfo, ok := devInfoResponse.(*device.GetDeviceInformationResponse)
+	devInfo, ok := devInfoResponse.(*onvifdevice.GetDeviceInformationResponse)
 	if !ok {
-		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("invalid GetDeviceInformationResponse for the camera %s", dev.Name), nil)
+		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("invalid GetDeviceInformationResponse for the camera %s", device.Name), nil)
 	}
 	return devInfo, nil
 }
 
 // newOnvifClient creates a temporary client for auto-discovery
-func (d *Driver) newTemporaryOnvifClient(dev models.Device) (*OnvifClient, errors.EdgeX) {
-	cameraInfo, edgexErr := CreateCameraInfo(dev.Protocols)
+func (d *Driver) newTemporaryOnvifClient(device models.Device) (*OnvifClient, errors.EdgeX) {
+	cameraInfo, edgexErr := CreateCameraInfo(device.Protocols)
 	if edgexErr != nil {
-		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("failed to create cameraInfo for camera %s", dev.Name), edgexErr)
+		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("failed to create cameraInfo for camera %s", device.Name), edgexErr)
 	}
 
 	var credential config.Credentials
@@ -525,7 +539,7 @@ func (d *Driver) newTemporaryOnvifClient(dev models.Device) (*OnvifClient, error
 		// since this is just a temporary client, we do not want to wait for credentials to be available
 		credential, edgexErr = d.tryGetCredentials(cameraInfo.SecretPath)
 		if edgexErr != nil {
-			return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("failed to get credentials for camera %s", dev.Name), edgexErr)
+			return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("failed to get credentials for camera %s", device.Name), edgexErr)
 		}
 	}
 
@@ -544,7 +558,7 @@ func (d *Driver) newTemporaryOnvifClient(dev models.Device) (*OnvifClient, error
 
 	client := &OnvifClient{
 		lc:          d.lc,
-		DeviceName:  dev.Name,
+		DeviceName:  device.Name,
 		cameraInfo:  cameraInfo,
 		onvifDevice: onvifDevice,
 	}

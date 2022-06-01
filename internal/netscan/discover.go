@@ -9,14 +9,16 @@ package netscan
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
-	"github.com/pkg/errors"
 	"math"
 	"net"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
+
+	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 )
 
 const (
@@ -26,10 +28,10 @@ const (
 
 // AutoDiscover probes all addresses in the configured network to attempt to discover any possible
 // devices for a specific protocol
-func AutoDiscover(ctx context.Context, proto ProtocolSpecificDiscovery, params Params) []DiscoveredDevice {
+func AutoDiscover(ctx context.Context, proto ProtocolSpecificDiscovery, params Params) []sdkModel.DiscoveredDevice {
 	params.Logger.Debugf("AutoDiscover called with the following parameters: %+v", params)
 	if len(params.Subnets) == 0 {
-		params.Logger.Warnf("Discover was called, but no subnet information has been configured!")
+		params.Logger.Warn("Discover was called, but no subnet information has been configured!")
 		return nil
 	}
 
@@ -58,7 +60,7 @@ func AutoDiscover(ctx context.Context, proto ProtocolSpecificDiscovery, params P
 	}
 
 	if estimatedProbes == 0 {
-		params.Logger.Warnf("No valid CIDRs provided, unable to scan for devices.")
+		params.Logger.Warn("No valid CIDRs provided, unable to scan for devices.")
 		return nil
 	}
 
@@ -144,20 +146,23 @@ func AutoDiscover(ctx context.Context, proto ProtocolSpecificDiscovery, params P
 //
 // Does not check for context cancellation because we still want to
 // process any in-flight results.
-func processResultChannel(resultCh chan []ProbeResult, proto ProtocolSpecificDiscovery, params Params) []DiscoveredDevice {
-	devices := make([]DiscoveredDevice, 0)
+func processResultChannel(resultCh chan []ProbeResult, proto ProtocolSpecificDiscovery, params Params) []sdkModel.DiscoveredDevice {
+	devices := make([]sdkModel.DiscoveredDevice, 0)
 	for probeResults := range resultCh {
 		if len(probeResults) == 0 {
 			continue
 		}
 
 		for _, probeResult := range probeResults {
-			dev, err := proto.ConvertProbeResult(probeResult, params)
+			device, err := proto.ConvertProbeResult(probeResult, params)
 			if err != nil {
 				params.Logger.Warnf("issue converting probe result to discovered device: %s", err.Error())
 				continue
 			}
-			devices = append(devices, dev)
+			// only add if a valid device was returned
+			if device.Name != "" {
+				devices = append(devices, device)
+			}
 		}
 	}
 	return devices
@@ -171,7 +176,9 @@ func handleConnectionInternal(host string, port string, conn net.Conn, params wo
 
 	results, err := params.proto.OnConnectionDialed(host, port, conn, params.Params)
 	if err != nil {
-		params.Logger.Debugf(err.Error())
+		// log as debug because network probe failure is only useful for debug purposes as it does not
+		// affect the actual functionality of the service
+		params.Logger.Debug(err.Error())
 	} else if len(results) > 0 {
 		params.resultCh <- results
 	}
@@ -186,7 +193,8 @@ func probe(host string, ports []string, params workerParams) {
 	params.Logger.Tracef("Dial: %s", addr)
 	conn, err := net.DialTimeout(params.NetworkProtocol, addr, params.Timeout)
 	if err != nil {
-		params.Logger.Tracef(err.Error())
+		// logging as trace as this will log per unsuccessful probe
+		params.Logger.Trace(err.Error())
 		// EHOSTUNREACH specifies that the host is un-reachable or there is no route to host.
 		// EHOSTDOWN specifies that the network or host is down.
 		// If either of these are the error, do not bother probing the host any longer.
@@ -222,7 +230,7 @@ func probe(host string, ports []string, params workerParams) {
 			params.Logger.Tracef("Dial: %s", addr)
 			conn2, err := net.DialTimeout(params.NetworkProtocol, addr, params.Timeout)
 			if err != nil {
-				params.Logger.Tracef(err.Error())
+				params.Logger.Trace(err.Error())
 				return
 			}
 			defer conn2.Close()
@@ -246,13 +254,13 @@ func ipWorker(params workerParams) {
 			// stop working if we have been cancelled
 			return
 
-		case a, ok := <-params.ipCh:
+		case uintIp, ok := <-params.ipCh:
 			if !ok {
 				// channel has been closed
 				return
 			}
 
-			binary.BigEndian.PutUint32(ip, a)
+			binary.BigEndian.PutUint32(ip, uintIp)
 
 			ipStr := ip.String()
 
