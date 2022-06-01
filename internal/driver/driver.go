@@ -11,12 +11,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/edgexfoundry/device-onvif-camera/internal/netscan"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/edgexfoundry/device-onvif-camera/internal/netscan"
 
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	sdk "github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
@@ -322,11 +323,12 @@ func (d *Driver) updateExistingDevice(device models.Device, discDev sdkModel.Dis
 		return nil
 	}
 
-	if err := d.svc.UpdateDevice(device); err != nil {
+	err := sdk.RunningService().UpdateDevice(device)
+	if err != nil {
 		d.lc.Error("There was an error updating the network address for an existing device.",
 			"deviceName", device.Name,
 			"error", err)
-		return err
+		return errors.NewCommonEdgeXWrapper(err)
 	}
 
 	return nil
@@ -419,6 +421,30 @@ func (d *Driver) Discover() {
 	// pass the discovered devices to the EdgeX SDK to be passed through to the provision watchers
 	filtered := d.discoverFilter(discoveredDevices)
 	d.deviceCh <- filtered
+	d.rediscover() // update device
+}
+
+// updates the device service when rediscovered devices are found
+func (d *Driver) rediscover() {
+	deviceService := sdk.RunningService()
+
+	for _, device := range deviceService.Devices() {
+		// onvif client should not be created for the control-plane device
+		if device.Name == d.serviceName {
+			continue
+		}
+
+		d.lc.Infof("Updating onvif client for '%s' camera", device.Name)
+
+		onvifClient, err := d.newOnvifClient(device)
+		if err != nil {
+			d.lc.Errorf("failed to update onvif client for '%s' camera, skipping this device.", device.Name)
+			continue
+		}
+		d.lock.Lock()
+		d.onvifClients[device.Name] = onvifClient
+		d.lock.Unlock()
+	}
 }
 
 // multicast enable/disable via config option

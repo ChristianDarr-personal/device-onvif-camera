@@ -17,6 +17,7 @@ import (
 	wsdiscovery "github.com/IOTechSystems/onvif/ws-discovery"
 	"github.com/edgexfoundry/device-onvif-camera/internal/netscan"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
+	"github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
 	contract "github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
@@ -206,7 +207,7 @@ func executeRawProbe(conn net.Conn, params netscan.Params) ([]onvif.Device, erro
 
 // makeDeviceMap creates a lookup table of existing devices by EndpointRefAddress
 func (d *Driver) makeDeviceMap() map[string]contract.Device {
-	devices := d.svc.Devices()
+	devices := service.RunningService().Devices()
 	deviceMap := make(map[string]contract.Device, len(devices))
 
 	for _, dev := range devices {
@@ -263,30 +264,3 @@ func (d *Driver) discoverFilter(discoveredDevices []sdkModel.DiscoveredDevice) (
 
 	return filtered
 }
-
-// // checkConnection compares all existing devices and searches for a matching discovered device
-// // it updates all disconnected devices with its status
-// func (d *Driver) checkConnection(discovered []sdkModel.DiscoveredDevice) {
-// 	devMap := d.makeDeviceMap() // create comparison map
-// 	var connected bool
-// 	for name, dev := range devMap {
-// 		connected = false
-// 		for _, discDev := range discovered {
-// 			if discDev.Protocols["Onvif"]["EndpointRefAddress"] == name {
-// 				connected = true
-// 				dev.LastConnected = time.Now().Unix()
-// 				break
-// 			}
-// 		}
-// 		if !connected {
-// 			elapsed := time.Now().Unix() - dev.LastConnected
-// 			if elapsed > 200 {
-// 				// Decommissioned
-// 			} else {
-// 				// Maintenance
-// 			}
-// 			dev.OperatingState = contract.Down
-// 			d.svc.UpdateDevice(dev)
-// 		}
-// 	}
-// }
