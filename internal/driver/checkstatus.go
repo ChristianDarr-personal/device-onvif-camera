@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
@@ -33,7 +32,7 @@ func (d *Driver) checkStatuses() {
 		if d.testConnectionAuth(device) {
 			status = UpWithAuth
 		} else if d.testConnectionNoAuth(device) {
-			status = UpWithAuthDesc
+			status = UpWithoutAuth
 		} else if d.httpProbe(device) {
 			status = Reachable
 		}
@@ -110,21 +109,6 @@ func (d *Driver) httpProbe(device sdkModel.Device) bool {
 func (d *Driver) updateDeviceStatus(device sdkModel.Device, status string) error {
 	device.Protocols[OnvifProtocol][DeviceStatus] = status
 
-	var desc string
-
-	switch status {
-	case UpWithAuth:
-		desc = UpWithAuthDesc
-	case UpWithoutAuth:
-		desc = UpWithoutAuthDesc
-	case Reachable:
-		desc = ReachableDesc
-	case Unreachable:
-		desc = UnreachableDesc
-	}
-
-	device.Protocols[OnvifProtocol][DeviceStatusDescription] = desc
-
 	if status != Unreachable {
 		device.Protocols[OnvifProtocol][LastSeen] = time.Now().Format(time.UnixDate)
 	}
@@ -165,10 +149,7 @@ func (d *Driver) taskLoop(ctx context.Context) {
 func (d *Driver) StartTaskLoop() error {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	var wg sync.WaitGroup
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
 		d.taskLoop(ctx)
 		d.lc.Info("Task loop has exited.")
 	}()
