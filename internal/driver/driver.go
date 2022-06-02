@@ -429,30 +429,6 @@ func (d *Driver) Discover() {
 	// pass the discovered devices to the EdgeX SDK to be passed through to the provision watchers
 	filtered := d.discoverFilter(discoveredDevices)
 	d.deviceCh <- filtered
-	d.rediscover() // update device
-}
-
-// updates the device service when rediscovered devices are found
-func (d *Driver) rediscover() {
-	deviceService := sdk.RunningService()
-
-	for _, device := range deviceService.Devices() {
-		// onvif client should not be created for the control-plane device
-		if device.Name == d.serviceName {
-			continue
-		}
-
-		d.lc.Infof("Updating onvif client for '%s' camera", device.Name)
-
-		onvifClient, err := d.newOnvifClient(device)
-		if err != nil {
-			d.lc.Errorf("failed to update onvif client for '%s' camera, skipping this device.", device.Name)
-			continue
-		}
-		d.lock.Lock()
-		d.onvifClients[device.Name] = onvifClient
-		d.lock.Unlock()
-	}
 }
 
 // multicast enable/disable via config option

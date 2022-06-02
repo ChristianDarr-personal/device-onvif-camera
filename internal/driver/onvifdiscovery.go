@@ -84,6 +84,7 @@ func (d *Driver) createDiscoveredDevice(onvifDevice onvif.Device) (sdkModel.Disc
 		return sdkModel.DiscoveredDevice{}, fmt.Errorf("empty EndpointRefAddress for XAddr %s", xaddr)
 	}
 	address, port := addressAndPort(xaddr)
+	timestamp := time.Now().Format(time.UnixDate)
 	device := contract.Device{
 		// Using Xaddr as the temporary name
 		Name: xaddr,
@@ -96,7 +97,7 @@ func (d *Driver) createDiscoveredDevice(onvifDevice onvif.Device) (sdkModel.Disc
 				EndpointRefAddress:      endpointRefAddr,
 				DeviceStatus:            Reachable,
 				DeviceStatusDescription: ReachableDesc,
-				LastSeen:                time.Now().Format(time.UnixDate),
+				LastSeen:                timestamp,
 			},
 		},
 	}
