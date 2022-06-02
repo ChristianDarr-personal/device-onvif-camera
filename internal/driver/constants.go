@@ -24,7 +24,7 @@ const (
 	Unreachable   = "Unreachable"
 
 	// Maximum interval for checkStatus interval
-	maxStatusInterval = 300
+	maxStatusInterval = 3600
 
 	// Service is resource attribute and indicates the web service for the Onvif
 	Service = "service"

@@ -9,7 +9,6 @@ package driver
 import (
 	"context"
 	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -19,10 +18,10 @@ import (
 	sdkModel "github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 )
 
-// checkStatuses loops through all discovered and tries to determine the most accurate operating state
+// checkStatuses loops through all registered devices and tries to determine the most accurate connection state
 func (d *Driver) checkStatuses() {
 	d.lc.Debug("checkStatuses has been called")
-	for _, device := range service.RunningService().Devices() { // TODO: ensure this returns the proper value
+	for _, device := range service.RunningService().Devices() {
 		// "higher" degrees of connection are tested first, becuase if they
 		// succeed, the "lower" levels of connection will too
 		if device.Name == d.serviceName { // skip control plane device
@@ -52,11 +51,6 @@ func (d *Driver) testConnectionAuth(device sdkModel.Device) bool {
 		d.lc.Debugf("Connection to %s failed when using authentication", device.Name)
 		return false
 	}
-	// // update entry in core metadata
-	// err := d.updateDeviceStatus(device, UpWithAuth)
-	// if err != nil {
-	// 	d.lc.Warn("Could not update device status")
-	// }
 	return true
 }
 
@@ -65,44 +59,33 @@ func (d *Driver) testConnectionAuth(device sdkModel.Device) bool {
 // and return a bool indicating success or failure
 func (d *Driver) testConnectionNoAuth(device sdkModel.Device) bool {
 	// sends get capabilities command to device (does not require credentials)
-	_, edgexErr := d.newTemporaryOnvifClient(device) // best way?
+	_, edgexErr := d.newTemporaryOnvifClient(device)
 	if edgexErr != nil {
 		d.lc.Debugf("Connection to %s failed when not using authentication", device.Name)
 		return false
 	}
-
-	// // update entry in core metadata
-	// err := d.updateDeviceStatus(device, UpWithoutAuth)
-	// if err != nil {
-	// 	d.lc.Warn("Could not update device status")
-	// }
 	return true
 }
 
 // httpProbe attempts to make a connection to a specific ip and port list to determine
 // if there is a service listening at that ip+port.
 func (d *Driver) httpProbe(device sdkModel.Device) bool {
-	addr := device.Protocols[OnvifProtocol][Address]
-	port := device.Protocols[OnvifProtocol][Port]
-	if addr == "" || port == "" {
-		d.lc.Warnf("Device %s has no network address, cannot send probe.", device.Name)
-		return false
+	var host string
+	if device.Protocols[OnvifProtocol] != nil {
+		addr := device.Protocols[OnvifProtocol][Address]
+		port := device.Protocols[OnvifProtocol][Port]
+		if addr == "" || port == "" {
+			d.lc.Warnf("Device %s has no network address, cannot send probe.", device.Name)
+			return false
+		}
+		host = addr + ":" + port
 	}
-	host := addr + ":" + port
 
-	net.DialTCP(host, nil, nil) // TODO: im
-	// make http call to device
-	_, err := http.Get(host)
+	_, err := net.DialTimeout("tcp", host, time.Duration(d.config.ProbeTimeoutMillis))
 	if err != nil {
 		d.lc.Debugf("Connection to %s failed when using simple http request", device.Name)
 		return false
 	}
-
-	// // update entry in core metadata
-	// err = d.updateDeviceStatus(device, Reachable)
-	// if err != nil {
-	// 	d.lc.Warn("Could not update device status")
-	// }
 	return true
 }
 
@@ -140,7 +123,7 @@ func (d *Driver) taskLoop(ctx context.Context) {
 		case <-statusTicker.C:
 			start := time.Now()
 			d.checkStatuses() // checks the status of every device
-			d.lc.Debugf("Time elapsed for checkStatuses: %s", time.Since(start))
+			d.lc.Debugf("checkStatuses completed in: %v", time.Since(start))
 		}
 	}
 }
@@ -155,7 +138,7 @@ func (d *Driver) StartTaskLoop() error {
 	}()
 
 	go func() {
-		signals := make(chan os.Signal, 1) // TODO: determine if this should be 2
+		signals := make(chan os.Signal, 1)
 		signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 		s := <-signals
 		d.lc.Infof("Received '%s' signal from OS.", s.String())

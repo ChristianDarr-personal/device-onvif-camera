@@ -112,7 +112,7 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 	if d.config.EnableStatusCheck == 1 { // TODO: determine best place for this
 		// starts loop to check connection and determine device status
 		if err := d.StartTaskLoop(); err != nil {
-			errors.NewCommonEdgeX(errors.KindUnknown, "Task loop could not not start", err) // TODO: figure out error kind
+			return errors.NewCommonEdgeX(errors.KindUnknown, "Task loop could not not start", err) // TODO: figure out error kind
 		}
 	}
 
