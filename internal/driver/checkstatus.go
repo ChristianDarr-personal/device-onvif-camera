@@ -1,7 +1,13 @@
 package driver
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
@@ -118,5 +124,66 @@ func (d *Driver) updateDeviceStatus(device sdkModel.Device, status string) error
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+// taskLoop is our main event loop for async processes
+// that can't be modeled within the SDK's pipeline event loop.
+//
+// Namely, it launches scheduled tasks and configuration changes.
+// Since nearly every round through this loop must read or write the inventory,
+// this taskLoop ensures the modifications are done safely
+// without requiring a ton of lock contention on the inventory itself.
+func (d *Driver) taskLoop(ctx context.Context) {
+	interval := d.config.CheckStatusInterval
+	if interval > maxStatusInterval {
+		d.lc.Warnf("Status interval of %d seconds is larger than the maximum value of %d seconds. Status interval has been set to the max value.", interval, maxStatusInterval)
+		interval = maxStatusInterval
+	}
+	// check the interval
+	statusTicker := time.NewTicker(time.Duration(interval) * time.Second)
+	eventCh := make(chan bool)
+
+	defer func() {
+		statusTicker.Stop()
+	}()
+
+	d.lc.Info("Starting task loop.")
+
+	for {
+		select {
+		case <-ctx.Done():
+			d.lc.Info("Stopping task loop.")
+			close(eventCh)
+			d.lc.Info("Task loop stopped.")
+			return
+		case <-statusTicker.C:
+			start := time.Now()
+			d.checkStatus() // checks the status of every device
+			fmt.Println(time.Since(start))
+		}
+	}
+}
+
+// RunUntilCancelled sets up the function pipeline and runs it. This function will not return
+// until the function pipeline is complete unless an error occurred running it.
+func (d *Driver) RunUntilCancelled() error {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		d.taskLoop(ctx)
+		d.lc.Info("Task loop has exited.")
+	}()
+
+	go func() {
+		signals := make(chan os.Signal, 1)
+		signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+		s := <-signals
+		d.lc.Info(fmt.Sprintf("Received '%s' signal from OS.", s.String()))
+		cancel() // signal the taskLoop to finish
+	}()
 	return nil
 }

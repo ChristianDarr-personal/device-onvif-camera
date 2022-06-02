@@ -38,6 +38,9 @@ type configuration struct {
 	ProbeTimeoutMillis int
 	// MaxDiscoverDurationSeconds indicates the amount of seconds discovery will run before timing out.
 	MaxDiscoverDurationSeconds int
+
+	// CheckStatusInterval indicates the period at which the device service will check device status
+	CheckStatusInterval int
 }
 
 // CameraInfo holds the camera connection info
