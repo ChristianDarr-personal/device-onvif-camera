@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -110,10 +109,10 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 		return errors.NewCommonEdgeXWrapper(edgexErr)
 	}
 
-	if d.config.EnableStatusCheck == 1 {
+	if d.config.EnableStatusCheck == 1 { // TODO: determine best place for this
 		// starts loop to check connection and determine device status
-		if err := d.RunUntilCancelled(); err != nil {
-			os.Exit(1)
+		if err := d.StartTaskLoop(); err != nil {
+			errors.NewCommonEdgeX(errors.KindUnknown, "Task loop could not not start", err) // TODO: figure out error kind
 		}
 	}
 
@@ -297,7 +296,7 @@ func (d *Driver) UpdateDevice(deviceName string, protocols map[string]models.Pro
 	return nil
 }
 
-// updateExistingDevice compares a discovered device and a matchingexisting device, and updates the existing
+// updateExistingDevice compares a discovered device and a matching existing device, and updates the existing
 // device network address and port if necessary
 func (d *Driver) updateExistingDevice(device models.Device, discDev sdkModel.DiscoveredDevice) error {
 	shouldUpdate := false

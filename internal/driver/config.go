@@ -39,9 +39,9 @@ type configuration struct {
 	// MaxDiscoverDurationSeconds indicates the amount of seconds discovery will run before timing out.
 	MaxDiscoverDurationSeconds int
 
-	// Indicates if statusCheck should be enabled
+	// EnablenStatusCheck indicates if status cehcking should be enabled
 	EnableStatusCheck int
-	// CheckStatusInterval indicates the period at which the device service will check device status
+	// CheckStatusInterval indicates the interval in seconds at which the device service will check device statuses
 	CheckStatusInterval int
 }
 

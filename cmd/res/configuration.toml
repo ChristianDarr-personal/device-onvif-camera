@@ -11,8 +11,8 @@ LogLevel = "INFO"
     [Writable.InsecureSecrets.Camera001]
     path = "credentials001"
       [Writable.InsecureSecrets.Camera001.Secrets]
-      username = "administrator"
-      password = "Password1!"
+      username = "admin"
+      password = "admin"
     # If having more than one camera, uncomment the following config settings
 #    [Writable.InsecureSecrets.Camera002]
 #    path = "credentials002"
@@ -119,7 +119,7 @@ DiscoveryMode = "both" # netscan, multicast, or both
 
 # List of IPv4 subnets to perform netscan discovery on, in CIDR format (X.X.X.X/Y)
 # separated by commas ex: "192.168.1.0/24,10.0.0.0/24"
-DiscoverySubnets = ""
+DiscoverySubnets = "0"
 
 # Maximum simultaneous network probes
 ProbeAsyncLimit = "4000"
@@ -133,8 +133,8 @@ ProbeTimeoutMillis = "2000"
 MaxDiscoverDurationSeconds = "300"
 
 # "1" enables checkStatus and "0" disables it
-EnableStatusCheck = "0"
+EnableStatusCheck = "1"
 
-# The interval at which the service will check the connection of all known cameras and update the device status 
+# The interval in seconds at which the service will check the connection of all known cameras and update the device status 
 # Maximum 300s
 CheckStatusInterval = "30"

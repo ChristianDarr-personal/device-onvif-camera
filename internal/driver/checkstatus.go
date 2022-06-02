@@ -1,8 +1,14 @@
+// -*- Mode: Go; indent-tabs-mode: t -*-
+//
+// Copyright (C) 2022 Intel Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package driver
 
 import (
 	"context"
-	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,25 +20,27 @@ import (
 	sdkModel "github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 )
 
-// connect loops through all discovered and tries to determine the most accurate operating state
-func (d *Driver) checkStatus() {
-	d.lc.Info("checkStatus has been called")
-	deviceMap := d.makeDeviceMap()
-	for _, device := range deviceMap {
+// checkStatuses loops through all discovered and tries to determine the most accurate operating state
+func (d *Driver) checkStatuses() {
+	d.lc.Debug("checkStatuses has been called")
+	for _, device := range service.RunningService().Devices() { // TODO: ensure this returns the proper value
 		// "higher" degrees of connection are tested first, becuase if they
 		// succeed, the "lower" levels of connection will too
-		if okAuth := d.testConnectionAuth(device); okAuth {
+		if device.Name == d.serviceName { // skip control plane device
 			continue
 		}
-		if okNoAuth := d.testConnectionNoAuth(device); okNoAuth {
-			continue
-		}
-		if okProbe := d.httpProbe(device); okProbe {
-			continue
+		status := Unreachable
+		if d.testConnectionAuth(device) {
+			status = UpWithAuth
+		} else if d.testConnectionNoAuth(device) {
+			status = UpWithAuthDesc
+		} else if d.httpProbe(device) {
+			status = Reachable
 		}
 
-		// will only reach here if all other methods fail
-		d.updateDeviceStatus(device, Unreachable)
+		if err := d.updateDeviceStatus(device, status); err != nil {
+			d.lc.Warnf("Could not update device status for device %s: %s", device.Name, err.Error())
+		}
 	}
 }
 
@@ -45,11 +53,11 @@ func (d *Driver) testConnectionAuth(device sdkModel.Device) bool {
 		d.lc.Debugf("Connection to %s failed when using authentication", device.Name)
 		return false
 	}
-	// update entry in core metadata
-	err := d.updateDeviceStatus(device, UpWithAuth)
-	if err != nil {
-		d.lc.Warn("Could not update device status")
-	}
+	// // update entry in core metadata
+	// err := d.updateDeviceStatus(device, UpWithAuth)
+	// if err != nil {
+	// 	d.lc.Warn("Could not update device status")
+	// }
 	return true
 }
 
@@ -64,11 +72,11 @@ func (d *Driver) testConnectionNoAuth(device sdkModel.Device) bool {
 		return false
 	}
 
-	// update entry in core metadata
-	err := d.updateDeviceStatus(device, UpWithoutAuth)
-	if err != nil {
-		d.lc.Warn("Could not update device status")
-	}
+	// // update entry in core metadata
+	// err := d.updateDeviceStatus(device, UpWithoutAuth)
+	// if err != nil {
+	// 	d.lc.Warn("Could not update device status")
+	// }
 	return true
 }
 
@@ -77,8 +85,13 @@ func (d *Driver) testConnectionNoAuth(device sdkModel.Device) bool {
 func (d *Driver) httpProbe(device sdkModel.Device) bool {
 	addr := device.Protocols[OnvifProtocol][Address]
 	port := device.Protocols[OnvifProtocol][Port]
+	if addr == "" || port == "" {
+		d.lc.Warnf("Device %s has no network address, cannot send probe.", device.Name)
+		return false
+	}
 	host := addr + ":" + port
 
+	net.DialTCP(host, nil, nil) // TODO: im
 	// make http call to device
 	_, err := http.Get(host)
 	if err != nil {
@@ -86,11 +99,11 @@ func (d *Driver) httpProbe(device sdkModel.Device) bool {
 		return false
 	}
 
-	// update entry in core metadata
-	err = d.updateDeviceStatus(device, Reachable)
-	if err != nil {
-		d.lc.Warn("Could not update device status")
-	}
+	// // update entry in core metadata
+	// err = d.updateDeviceStatus(device, Reachable)
+	// if err != nil {
+	// 	d.lc.Warn("Could not update device status")
+	// }
 	return true
 }
 
@@ -98,51 +111,36 @@ func (d *Driver) updateDeviceStatus(device sdkModel.Device, status string) error
 	device.Protocols[OnvifProtocol][DeviceStatus] = status
 
 	var desc string
-	var seen bool
 
 	switch status {
 	case UpWithAuth:
 		desc = UpWithAuthDesc
-		seen = true
 	case UpWithoutAuth:
 		desc = UpWithoutAuthDesc
-		seen = true
 	case Reachable:
 		desc = ReachableDesc
-		seen = true
 	case Unreachable:
 		desc = UnreachableDesc
 	}
 
 	device.Protocols[OnvifProtocol][DeviceStatusDescription] = desc
 
-	if seen {
+	if status != Unreachable {
 		device.Protocols[OnvifProtocol][LastSeen] = time.Now().Format(time.UnixDate)
 	}
 
-	err := service.RunningService().UpdateDevice(device)
-	if err != nil {
-		return err
-	}
-	return nil
+	return service.RunningService().UpdateDevice(device)
 }
 
-// taskLoop is our main event loop for async processes
-// that can't be modeled within the SDK's pipeline event loop.
-//
-// Namely, it launches scheduled tasks and configuration changes.
-// Since nearly every round through this loop must read or write the inventory,
-// this taskLoop ensures the modifications are done safely
-// without requiring a ton of lock contention on the inventory itself.
+// taskLoop is the driver for the checking the status at regular intervals
 func (d *Driver) taskLoop(ctx context.Context) {
 	interval := d.config.CheckStatusInterval
-	if interval > maxStatusInterval {
+	if interval > maxStatusInterval { // TODO: Update with issue #75
 		d.lc.Warnf("Status interval of %d seconds is larger than the maximum value of %d seconds. Status interval has been set to the max value.", interval, maxStatusInterval)
 		interval = maxStatusInterval
 	}
 	// check the interval
 	statusTicker := time.NewTicker(time.Duration(interval) * time.Second)
-	eventCh := make(chan bool)
 
 	defer func() {
 		statusTicker.Stop()
@@ -153,21 +151,18 @@ func (d *Driver) taskLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			d.lc.Info("Stopping task loop.")
-			close(eventCh)
 			d.lc.Info("Task loop stopped.")
 			return
 		case <-statusTicker.C:
 			start := time.Now()
-			d.checkStatus() // checks the status of every device
-			fmt.Println(time.Since(start))
+			d.checkStatuses() // checks the status of every device
+			d.lc.Debugf("Time elapsed for checkStatuses: %s", time.Since(start))
 		}
 	}
 }
 
-// RunUntilCancelled sets up the function pipeline and runs it. This function will not return
-// until the function pipeline is complete unless an error occurred running it.
-func (d *Driver) RunUntilCancelled() error {
+// RunUntilCancelled sets up the taskLoop and will continually run it until cancelled
+func (d *Driver) StartTaskLoop() error {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
@@ -179,10 +174,10 @@ func (d *Driver) RunUntilCancelled() error {
 	}()
 
 	go func() {
-		signals := make(chan os.Signal, 1)
+		signals := make(chan os.Signal, 1) // TODO: determine if this should be 2
 		signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 		s := <-signals
-		d.lc.Info(fmt.Sprintf("Received '%s' signal from OS.", s.String()))
+		d.lc.Infof("Received '%s' signal from OS.", s.String())
 		cancel() // signal the taskLoop to finish
 	}()
 	return nil
