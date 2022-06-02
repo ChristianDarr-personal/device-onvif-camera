@@ -116,7 +116,7 @@ func (d *Driver) updateDeviceStatus(device sdkModel.Device, status string) error
 	return service.RunningService().UpdateDevice(device)
 }
 
-// taskLoop is the driver for the checking the status at regular intervals
+// taskLoop manages all of our custom background tasks such as checking camera statuses at regular intervals
 func (d *Driver) taskLoop(ctx context.Context) {
 	interval := d.config.CheckStatusInterval
 	if interval > maxStatusInterval { // TODO: Update with issue #75
