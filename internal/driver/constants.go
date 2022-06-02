@@ -31,6 +31,9 @@ const (
 	ReachableDesc     = "Discoverable but cannot receive commands"
 	UnreachableDesc   = "Cannot be discovered"
 
+	// Maximum interval for checkStatus interval
+	maxStatusInterval = 300
+
 	// Service is resource attribute and indicates the web service for the Onvif
 	Service = "service"
 	// GetFunction is resource attribute and indicates the SOAP action for the specified web service, it is used for the read operation
