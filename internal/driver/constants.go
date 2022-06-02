@@ -13,6 +13,23 @@ const (
 	AuthMode           = "AuthMode"
 	SecretPath         = "SecretPath"
 	EndpointRefAddress = "EndpointRefAddress"
+	LastSeen           = "LastSeen"
+
+	// Field in OnvifProtocol map
+	DeviceStatus = "DeviceStatus"
+	// Enumerations for DeviceStatus
+	UpWithAuth    = "UpWithAuth"
+	UpWithoutAuth = "UpWithoutAuth"
+	Reachable     = "Reachable"
+	Unreachable   = "Unreachable"
+
+	// Field in OnvifProtocol map
+	DeviceStatusDescription = "DeviceStatusDescription"
+	// Enumerations for DeviceStatusDescription
+	UpWithAuthDesc    = "Up and has working credentials"
+	UpWithoutAuthDesc = "Up but does not have working credentials"
+	ReachableDesc     = "Discoverable but cannot receive commands"
+	UnreachableDesc   = "Cannot be discovered"
 
 	// Service is resource attribute and indicates the web service for the Onvif
 	Service = "service"
