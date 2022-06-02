@@ -110,9 +110,11 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 		return errors.NewCommonEdgeXWrapper(edgexErr)
 	}
 
-	// starts loop to check connection and determine device status
-	if err := d.RunUntilCancelled(); err != nil {
-		os.Exit(1)
+	if d.config.EnableStatusCheck == 1 {
+		// starts loop to check connection and determine device status
+		if err := d.RunUntilCancelled(); err != nil {
+			os.Exit(1)
+		}
 	}
 
 	d.lc.Info("Driver initialized.")
