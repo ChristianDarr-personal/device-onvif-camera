@@ -89,11 +89,14 @@ func (d *Driver) createDiscoveredDevice(onvifDevice onvif.Device) (sdkModel.Disc
 		Name: xaddr,
 		Protocols: map[string]contract.ProtocolProperties{
 			OnvifProtocol: {
-				Address:            address,
-				Port:               port,
-				AuthMode:           d.config.DefaultAuthMode,
-				SecretPath:         d.config.DefaultSecretPath,
-				EndpointRefAddress: endpointRefAddr,
+				Address:                 address,
+				Port:                    port,
+				AuthMode:                d.config.DefaultAuthMode,
+				SecretPath:              d.config.DefaultSecretPath,
+				EndpointRefAddress:      endpointRefAddr,
+				DeviceStatus:            Reachable,
+				DeviceStatusDescription: ReachableDesc,
+				LastSeen:                time.Now().Format(time.UnixDate),
 			},
 		},
 	}
@@ -109,6 +112,9 @@ func (d *Driver) createDiscoveredDevice(onvifDevice onvif.Device) (sdkModel.Disc
 	var discovered sdkModel.DiscoveredDevice
 	if edgexErr != nil {
 		d.lc.Warnf("failed to get the device information for the camera %s, %v", endpointRefAddr, edgexErr)
+		device.Protocols[OnvifProtocol][DeviceStatus] = Reachable // update device status in this error case
+		device.Protocols[OnvifProtocol][DeviceStatusDescription] = ReachableDesc
+		device.Protocols[OnvifProtocol][LastSeen] = time.Now().Format(time.UnixDate)
 		discovered = sdkModel.DiscoveredDevice{
 			Name:        endpointRefAddr,
 			Protocols:   device.Protocols,
@@ -122,6 +128,9 @@ func (d *Driver) createDiscoveredDevice(onvifDevice onvif.Device) (sdkModel.Disc
 		device.Protocols[OnvifProtocol][FirmwareVersion] = devInfo.FirmwareVersion
 		device.Protocols[OnvifProtocol][SerialNumber] = devInfo.SerialNumber
 		device.Protocols[OnvifProtocol][HardwareId] = devInfo.HardwareId
+		device.Protocols[OnvifProtocol][DeviceStatus] = UpWithAuth
+		device.Protocols[OnvifProtocol][DeviceStatusDescription] = UpWithAuthDesc
+		device.Protocols[OnvifProtocol][LastSeen] = time.Now().Format(time.UnixDate)
 
 		// Spaces are not allowed in the device name
 		deviceName := fmt.Sprintf("%s-%s-%s",
