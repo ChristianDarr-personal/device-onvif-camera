@@ -145,7 +145,7 @@ func (d *Driver) taskLoop(ctx context.Context) {
 	}
 }
 
-// RunUntilCancelled sets up the taskLoop and will continually run it until cancelled
+// StartTaskLoop runs the taskLoop in the background until cancelled
 func (d *Driver) StartTaskLoop() error {
 	ctx, cancel := context.WithCancel(context.Background())
 
