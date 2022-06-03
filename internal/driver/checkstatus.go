@@ -32,7 +32,7 @@ func (d *Driver) checkStatuses() {
 			status = UpWithAuth
 		} else if d.testConnectionNoAuth(device) {
 			status = UpWithoutAuth
-		} else if d.httpProbe(device) {
+		} else if d.tcpProbe(device) {
 			status = Reachable
 		}
 
@@ -67,9 +67,9 @@ func (d *Driver) testConnectionNoAuth(device sdkModel.Device) bool {
 	return true
 }
 
-// httpProbe attempts to make a connection to a specific ip and port list to determine
+// tcpProbe attempts to make a connection to a specific ip and port list to determine
 // if there is a service listening at that ip+port.
-func (d *Driver) httpProbe(device sdkModel.Device) bool {
+func (d *Driver) tcpProbe(device sdkModel.Device) bool {
 	var host string
 	if device.Protocols[OnvifProtocol] != nil {
 		addr := device.Protocols[OnvifProtocol][Address]
@@ -83,7 +83,7 @@ func (d *Driver) httpProbe(device sdkModel.Device) bool {
 
 	_, err := net.DialTimeout("tcp", host, time.Duration(d.config.ProbeTimeoutMillis))
 	if err != nil {
-		d.lc.Debugf("Connection to %s failed when using simple http request", device.Name)
+		d.lc.Debugf("Connection to %s failed when using simple tcp dial ", device.Name)
 		return false
 	}
 	return true
