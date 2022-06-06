@@ -27,6 +27,7 @@ func (d *Driver) checkStatuses() {
 		if device.Name == d.serviceName { // skip control plane device
 			continue
 		}
+
 		status := Unreachable
 		if d.testConnectionAuth(device) {
 			status = UpWithAuth
@@ -80,12 +81,12 @@ func (d *Driver) tcpProbe(device sdkModel.Device) bool {
 		}
 		host = addr + ":" + port
 	}
-
-	_, err := net.DialTimeout("tcp", host, time.Duration(d.config.ProbeTimeoutMillis))
+	conn, err := net.DialTimeout("tcp", host, time.Duration(d.config.ProbeTimeoutMillis*int(time.Millisecond)))
 	if err != nil {
 		d.lc.Debugf("Connection to %s failed when using simple tcp dial ", device.Name)
 		return false
 	}
+	defer conn.Close()
 	return true
 }
 
