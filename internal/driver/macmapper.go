@@ -7,7 +7,7 @@
 package driver
 
 import (
-	"fmt"
+	"github.com/edgexfoundry/device-sdk-go/v2/pkg/interfaces"
 	"net"
 	"strings"
 	"sync"
@@ -19,11 +19,11 @@ type MACAddressMapper struct {
 	// credsMap is a map between mac address to secretPath
 	credsMap map[string]string
 
-	sdkService SDKService
+	sdkService interfaces.DeviceServiceSDK
 }
 
 // NewMACAddressMapper creates a new MACAddressMapper object
-func NewMACAddressMapper(sdkService SDKService) *MACAddressMapper {
+func NewMACAddressMapper(sdkService interfaces.DeviceServiceSDK) *MACAddressMapper {
 	return &MACAddressMapper{
 		credsMap:   make(map[string]string),
 		sdkService: sdkService,
@@ -62,22 +62,6 @@ func (m *MACAddressMapper) UpdateMappings(raw map[string]string) {
 	m.credsMap = credsMap
 }
 
-// ListMACAddresses will return a slice of mac addresses that have been assigned credentials
-func (m *MACAddressMapper) ListMACAddresses() []string {
-	m.credsMu.RLock()
-	defer m.credsMu.RUnlock()
-
-	macs := make([]string, len(m.credsMap))
-
-	i := 0
-	for mac := range m.credsMap {
-		macs[i] = mac
-		i++
-	}
-
-	return macs
-}
-
 // TryGetSecretPathForMACAddress will return the secret path associated with the mac address passed if a mapping exists,
 // the default secret path if the mapping is not found, or no auth if the mac address is invalid.
 func (m *MACAddressMapper) TryGetSecretPathForMACAddress(mac string, defaultSecretPath string) string {
@@ -113,20 +97,18 @@ func SanitizeMACAddress(mac string) (string, error) {
 
 // macAddressBytewiseReverse returns the byte-wise reverse of the input MAC Address.
 // Examples:
-// 		aa:bb:cc:dd:ee:ff -> ff:ee:dd:cc:bb:aa
-//		12:34:56:78:9a:bc -> bc:9a:78:56:34:12
+//
+//	aa:bb:cc:dd:ee:ff -> ff:ee:dd:cc:bb:aa
+//	12:34:56:78:9a:bc -> bc:9a:78:56:34:12
 func macAddressBytewiseReverse(mac string) (string, error) {
 	var err error
 	if mac, err = SanitizeMACAddress(mac); err != nil {
 		return "", err
 	}
 	mac = strings.ReplaceAll(mac, ":", "")
-	if len(mac)%2 != 0 {
-		return "", fmt.Errorf("mac address %s has invalid length of %d", mac, len(mac))
-	}
-
 	buf := strings.Builder{}
-	// loop through the string backwards two characters at a time (1-byte)
+	// loop through the string backwards two characters at a time (1-byte). Since the MAC address is
+	// already sanitized, we are guaranteed to have an even number of characters.
 	for i := len(mac); i > 0; i -= 2 {
 		buf.WriteString(mac[i-2 : i])
 		if i > 2 { // only write delimiter if more bytes exist

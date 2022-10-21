@@ -43,7 +43,7 @@ type OnvifClient struct {
 	driver      *Driver
 	lc          logger.LoggingClient
 	DeviceName  string
-	onvifDevice *onvif.Device
+	onvifDevice OnvifDevice
 	// RebootNeeded indicates the camera should reboot to apply the configuration change
 	RebootNeeded bool
 	// CameraEventResource is used to send the async event to north bound
@@ -330,7 +330,10 @@ func (onvifClient *OnvifClient) callGetSnapshotFunction() ([]byte, errors.EdgeX)
 	if edgexErr != nil {
 		return nil, errors.NewCommonEdgeXWrapper(edgexErr)
 	}
-	profilesResp := respContent.(*media.GetProfilesResponse)
+	profilesResp, ok := respContent.(*media.GetProfilesResponse)
+	if !ok {
+		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("invalid GetProfilesResponse of type %T for the camera %s", respContent, onvifClient.DeviceName), nil)
+	}
 	if len(profilesResp.Profiles) == 0 {
 		return nil, errors.NewCommonEdgeX(errors.KindServerError, "no onvif profiles found", nil)
 	}
@@ -343,7 +346,10 @@ func (onvifClient *OnvifClient) callGetSnapshotFunction() ([]byte, errors.EdgeX)
 	if edgexErr != nil {
 		return nil, errors.NewCommonEdgeXWrapper(edgexErr)
 	}
-	uriResponse := respContent.(*media.GetSnapshotUriResponse)
+	uriResponse, ok := respContent.(*media.GetSnapshotUriResponse)
+	if !ok {
+		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("invalid GetSnapshotUriResponse of type %T for the camera %s", respContent, onvifClient.DeviceName), nil)
+	}
 	url := uriResponse.MediaUri.Uri
 
 	// Get the snapshot binary data
@@ -410,7 +416,7 @@ func (onvifClient *OnvifClient) callOnvifFunction(serviceName, functionName stri
 	if edgexErr != nil {
 		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("failed to create '%s' response for the web service '%s'", functionName, serviceName), edgexErr)
 	}
-	res, _ := xml.Marshal(responseEnvelope.Body.Content)
+	res, _ := xml.Marshal(responseEnvelope)
 	onvifClient.lc.Debugf("SOAP Response: %v", string(res))
 
 	if servResp.StatusCode == http.StatusUnauthorized {

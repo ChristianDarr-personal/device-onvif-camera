@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/edgexfoundry/device-sdk-go/v2/pkg/interfaces"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -39,10 +40,6 @@ const (
 	URLRawQuery = "urlRawQuery"
 	jsonObject  = "jsonObject"
 
-	cameraAdded   = "CameraAdded"
-	cameraUpdated = "CameraUpdated"
-	cameraDeleted = "CameraDeleted"
-
 	wsDiscoveryPort = "3702"
 
 	// enable this by default, otherwise discovery will not work.
@@ -64,7 +61,7 @@ type Driver struct {
 	asynchCh chan<- *sdkModel.AsyncValues
 	deviceCh chan<- []sdkModel.DiscoveredDevice
 
-	sdkService SDKService
+	sdkService interfaces.DeviceServiceSDK
 
 	onvifClients map[string]*OnvifClient
 	clientsMu    *sync.RWMutex
@@ -116,9 +113,7 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 	d.clientsMu = new(sync.RWMutex)
 	d.configMu = new(sync.RWMutex)
 	d.onvifClients = make(map[string]*OnvifClient)
-	d.sdkService = &DeviceSDKService{
-		DeviceService: service.RunningService(),
-	}
+	d.sdkService = service.RunningService()
 	d.macAddressMapper = NewMACAddressMapper(d.sdkService)
 	d.config = &ServiceConfig{}
 
@@ -142,11 +137,6 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 	}
 
 	for _, device := range d.sdkService.Devices() {
-		// onvif client should not be created for the control-plane device
-		if device.Name == d.sdkService.Name() {
-			continue
-		}
-
 		d.lc.Infof("Initializing onvif client for '%s' camera", device.Name)
 
 		onvifClient, err := d.newOnvifClient(device)
@@ -267,6 +257,11 @@ func (d *Driver) addProvisionWatchers() error {
 
 	var errs []error
 	for _, file := range files {
+		// skip all directories, and files that do not end with .json
+		if file.IsDir() || !strings.HasSuffix(file.Name(), ".json") {
+			continue
+		}
+
 		filename := filepath.Join(provisionWatcherFolder, file.Name())
 		d.lc.Debugf("processing %s", filename)
 		var watcher dtos.ProvisionWatcher
@@ -455,33 +450,12 @@ func (d *Driver) Stop(force bool) error {
 	return nil
 }
 
-func (d *Driver) publishControlPlaneEvent(deviceName, eventType string) {
-	var cv *sdkModel.CommandValue
-	var err error
-
-	cv, err = sdkModel.NewCommandValue(eventType, common.ValueTypeString, deviceName)
-	if err != nil {
-		d.lc.Errorf("issue creating control plane-event %s for device %s: %v", eventType, deviceName, err)
-		return
-	}
-
-	asyncValues := &sdkModel.AsyncValues{
-		DeviceName:    d.sdkService.Name(),
-		CommandValues: []*sdkModel.CommandValue{cv},
-	}
-	d.asynchCh <- asyncValues
-}
-
 // AddDevice is a callback function that is invoked
 // when a new Device associated with this Device Service is added
 func (d *Driver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
-	// only execute if this was not called for the control-plane device
-	if deviceName != d.sdkService.Name() {
-		d.publishControlPlaneEvent(deviceName, cameraAdded)
-		err := d.createOnvifClient(deviceName)
-		if err != nil {
-			return errors.NewCommonEdgeXWrapper(err)
-		}
+	err := d.createOnvifClient(deviceName)
+	if err != nil {
+		return errors.NewCommonEdgeXWrapper(err)
 	}
 	return nil
 }
@@ -489,14 +463,10 @@ func (d *Driver) AddDevice(deviceName string, protocols map[string]models.Protoc
 // UpdateDevice is a callback function that is invoked
 // when a Device associated with this Device Service is updated
 func (d *Driver) UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
-	// only execute if this was not called for the control-plane device
-	if deviceName != d.sdkService.Name() {
-		d.publishControlPlaneEvent(deviceName, cameraUpdated)
-		// Invoke the createOnvifClient func to create new onvif client and replace the old one
-		err := d.createOnvifClient(deviceName)
-		if err != nil {
-			return errors.NewCommonEdgeXWrapper(err)
-		}
+	// Invoke the createOnvifClient func to create new onvif client and replace the old one
+	err := d.createOnvifClient(deviceName)
+	if err != nil {
+		return errors.NewCommonEdgeXWrapper(err)
 	}
 	return nil
 }
@@ -504,11 +474,7 @@ func (d *Driver) UpdateDevice(deviceName string, protocols map[string]models.Pro
 // RemoveDevice is a callback function that is invoked
 // when a Device associated with this Device Service is removed
 func (d *Driver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
-	// only execute if this was not called for the control-plane device
-	if deviceName != d.sdkService.Name() {
-		d.publishControlPlaneEvent(deviceName, cameraDeleted)
-		d.removeOnvifClient(deviceName)
-	}
+	d.removeOnvifClient(deviceName)
 	return nil
 }
 
@@ -562,7 +528,7 @@ func (d *Driver) Discover() {
 	var discoveredDevices []sdkModel.DiscoveredDevice
 
 	if discoveryMode.IsMulticastEnabled() {
-		discoveredDevices = append(discoveredDevices, d.discoverMulticast(discoveredDevices)...)
+		discoveredDevices = append(discoveredDevices, d.discoverMulticast()...)
 	}
 
 	if discoveryMode.IsNetScanEnabled() {
@@ -573,7 +539,7 @@ func (d *Driver) Discover() {
 				time.Duration(maxSeconds)*time.Second)
 			defer cancel()
 		}
-		discoveredDevices = append(discoveredDevices, d.discoverNetscan(ctx, discoveredDevices)...)
+		discoveredDevices = append(discoveredDevices, d.discoverNetscan(ctx)...)
 	}
 
 	// pass the discovered devices to the EdgeX SDK to be passed through to the provision watchers
@@ -582,7 +548,9 @@ func (d *Driver) Discover() {
 }
 
 // multicast enable/disable via config option
-func (d *Driver) discoverMulticast(discovered []sdkModel.DiscoveredDevice) []sdkModel.DiscoveredDevice {
+func (d *Driver) discoverMulticast() []sdkModel.DiscoveredDevice {
+	var discovered []sdkModel.DiscoveredDevice
+
 	d.configMu.RLock()
 	discoveryEthernetInterface := d.config.AppCustom.DiscoveryEthernetInterface
 	d.configMu.RUnlock()
@@ -603,7 +571,8 @@ func (d *Driver) discoverMulticast(discovered []sdkModel.DiscoveredDevice) []sdk
 }
 
 // netscan enable/disable via config option
-func (d *Driver) discoverNetscan(ctx context.Context, discovered []sdkModel.DiscoveredDevice) []sdkModel.DiscoveredDevice {
+func (d *Driver) discoverNetscan(ctx context.Context) []sdkModel.DiscoveredDevice {
+	var discovered []sdkModel.DiscoveredDevice
 
 	if len(strings.TrimSpace(d.config.AppCustom.DiscoverySubnets)) == 0 {
 		d.lc.Warn("netscan discovery was called, but DiscoverySubnets are empty!")
@@ -657,7 +626,7 @@ func (d *Driver) getNetworkInterfaces(device models.Device) (netInfo *onvifdevic
 	}
 	devInfo, ok := devInfoResponse.(*onvifdevice.GetNetworkInterfacesResponse)
 	if !ok {
-		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("invalid GetNetworkInterfacesResponse for the camera %s", device.Name), nil)
+		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("invalid GetNetworkInterfacesResponse of type %T for the camera %s", devInfoResponse, device.Name), nil)
 	}
 	return devInfo, nil
 }
@@ -673,7 +642,7 @@ func (d *Driver) getDeviceInformation(device models.Device) (devInfo *onvifdevic
 	}
 	devInfo, ok := devInfoResponse.(*onvifdevice.GetDeviceInformationResponse)
 	if !ok {
-		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("invalid GetDeviceInformationResponse for the camera %s", device.Name), nil)
+		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("invalid GetDeviceInformationResponse of type %T for the camera %s", devInfoResponse, device.Name), nil)
 	}
 	return devInfo, nil
 }
@@ -689,7 +658,7 @@ func (d *Driver) getEndpointReference(device models.Device) (devInfo *onvifdevic
 	}
 	devEndpointRef, ok := endpointRefResponse.(*onvifdevice.GetEndpointReferenceResponse)
 	if !ok {
-		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("invalid GetEndpointReferenceResponse for the camera %s", device.Name), nil)
+		return nil, errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("invalid GetEndpointReferenceResponse of type %T for the camera %s", endpointRefResponse, device.Name), nil)
 	}
 	return devEndpointRef, nil
 }
@@ -797,26 +766,31 @@ func (d *Driver) refreshDevice(device models.Device) error {
 	}
 
 	if isChanged {
-		if strings.HasPrefix(device.Name, UnknownDevicePrefix) {
-			d.lc.Infof("Removing device '%s' to update device with the updated name", device.Name)
-			err := d.sdkService.RemoveDeviceByName(device.Name)
-			if err != nil {
-				d.lc.Warnf("An error occurred while removing the device %s: %s",
-					device.Name, err)
-			}
+		return d.updateDevice(device, devInfo)
+	}
 
-			device.Id = ""
-			// Spaces are not allowed in the device name
-			device.Name = fmt.Sprintf("%s-%s-%s",
-				strings.ReplaceAll(devInfo.Manufacturer, " ", "-"),
-				strings.ReplaceAll(devInfo.Model, " ", "-"),
-				device.Protocols[OnvifProtocol][EndpointRefAddress])
-			d.lc.Infof("Adding device back with the updated name '%s'", device.Name)
-			_, err = d.sdkService.AddDevice(device)
-			return err
+	return nil
+}
+
+func (d *Driver) updateDevice(device models.Device, deviceInfo *onvifdevice.GetDeviceInformationResponse) error {
+	if strings.HasPrefix(device.Name, UnknownDevicePrefix) {
+		d.lc.Infof("Removing device '%s' to update device with the updated name", device.Name)
+		err := d.sdkService.RemoveDeviceByName(device.Name)
+		if err != nil {
+			d.lc.Warnf("An error occurred while removing the device %s: %s",
+				device.Name, err)
 		}
 
-		return d.sdkService.UpdateDevice(device)
+		device.Id = ""
+		// Spaces are not allowed in the device name
+		device.Name = fmt.Sprintf("%s-%s-%s",
+			strings.ReplaceAll(deviceInfo.Manufacturer, " ", "-"),
+			strings.ReplaceAll(deviceInfo.Model, " ", "-"),
+			device.Protocols[OnvifProtocol][EndpointRefAddress])
+		d.lc.Infof("Adding device back with the updated name '%s'", device.Name)
+		_, err = d.sdkService.AddDevice(device)
+		return err
 	}
-	return nil
+
+	return d.sdkService.UpdateDevice(device)
 }
