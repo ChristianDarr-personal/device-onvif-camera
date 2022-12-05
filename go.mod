@@ -6,10 +6,10 @@ require (
 	github.com/IOTechSystems/onvif v0.1.5
 	github.com/edgexfoundry/device-sdk-go/v2 v2.3.0-dev.30
 	github.com/edgexfoundry/go-mod-bootstrap/v2 v2.3.0-dev.21
-	github.com/edgexfoundry/go-mod-core-contracts/v2 v2.3.0-dev.18
+	github.com/edgexfoundry/go-mod-core-contracts/v2 v2.3.1-dev.1
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
-	github.com/stretchr/testify v1.8.0
+	github.com/stretchr/testify v1.8.1
 )
 
 require (
@@ -62,7 +62,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.1.1 // indirect
-	github.com/stretchr/objx v0.4.0 // indirect
+	github.com/stretchr/objx v0.5.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/zeebo/errs v1.2.2 // indirect
 	golang.org/x/crypto v0.0.0-20220919173607-35f4265a4bc0 // indirect
